@@ -1,0 +1,51 @@
+config:
+  target: "{{ $processEnvironment.API_BASE || 'http://localhost:5001' }}"
+  phases:
+    - duration: 60
+      arrivalRate: 20
+      name: warm-up
+    - duration: 120
+      arrivalRate: 80
+      rampTo: 200
+      name: ramp-to-200-rps
+    - duration: 180
+      arrivalRate: 200
+      name: sustain-200-rps
+  defaults:
+    headers:
+      Content-Type: application/json
+
+scenarios:
+  - name: Public browse flows
+    flow:
+      - get:
+          url: "/api/v1/health"
+      - get:
+          url: "/api/v1/hostels?limit=25&page=1"
+      - get:
+          url: "/api/v1/hostels/search?q=&availableRooms=true&maxDistance=5"
+      - get:
+          url: "/api/v1/pgs?limit=25&page=1"
+      - get:
+          url: "/api/v1/items?available=true&limit=25&page=1"
+      - think: 1
+  - name: Auth + like + view
+    flow:
+      - post:
+          url: "/api/v1/auth/login"
+          json:
+            email: "test@example.com"
+            password: "testpass"
+          capture:
+            - json: $.data.token
+              as: token
+      - get:
+          url: "/api/v1/hostels?limit=10"
+          headers:
+            Authorization: "Bearer {{ token }}"
+      - get:
+          url: "/api/v1/hostels/search?availableRooms=true&maxDistance=3"
+          headers:
+            Authorization: "Bearer {{ token }}"
+      # Randomly pick an id from a previous response would need JS; keep simple GET detail of a known path if seeded
+      - think: 1

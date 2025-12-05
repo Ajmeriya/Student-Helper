@@ -1,0 +1,104 @@
+cd c:\Users\ADMIN\Documents\student-helper2
+@"
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+.pnpm-lock.yaml
+
+# Environment variables (secrets, API keys, DB credentials)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE & Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.project
+.classpath
+*.sublime-project
+*.sublime-workspace
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Build & Dist
+backend/build/
+frontend/build/
+frontend/dist/
+*.tsbuildinfo
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Python (AI service)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.pytest_cache/
+
+# Uploads (local files, should be synced separately or via cloud storage)
+uploads/hostels/*
+uploads/items/*
+uploads/videos/*
+!uploads/hostels/.gitkeep
+!uploads/items/.gitkeep
+!uploads/videos/.gitkeep
+
+# Database backups and local snapshots
+backend/backups/*
+!backend/backups/.gitkeep
+
+# Testing
+coverage/
+.nyc_output/
+
+# PM2
+ecosystem.config.js.bak
+
+# Misc
+.cache/
+tmp/
+temp/
+*.tmp
+
+# Git
+.git/
+"@ | Out-File -Encoding UTF8 .gitignore

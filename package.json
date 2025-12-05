@@ -1,0 +1,52 @@
+{
+  "name": "student-helper-app",
+  "version": "1.0.0",
+  "main": "backend/server.js",
+  "scripts": {
+    "start": "node backend/server.js",
+    "dev": "nodemon backend/server.js",
+    "client": "cd frontend && npm start",
+    "server": "nodemon backend/server.js",
+    "build": "cd frontend && npm run build",
+    "load:test": "npx artillery run tests/perf/load.yml",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start:pm2": "pm2 start ecosystem.config.js"
+  },
+  "keywords": [
+    "mern",
+    "student-helper",
+    "marketplace",
+    "hostel-finder",
+    "ai-ml"
+  ],
+  "author": "Ajmeriya Harsh",
+  "license": "ISC",
+  "description": "Student Helper App - MERN stack with AI/ML integration for marketplace and hostel finder",
+  "dependencies": {
+    "@sentry/node": "^8.33.1",
+    "@sentry/profiling-node": "^8.33.1",
+    "apicache": "^1.6.3",
+    "axios": "^1.12.2",
+    "bcryptjs": "^3.0.2",
+    "cloudinary": "^1.41.3",
+    "compression": "^1.7.5",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "express-mongo-sanitize": "^2.2.0",
+    "express-rate-limit": "^7.4.0",
+    "helmet": "^8.0.0",
+    "hpp": "^0.2.3",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.19.1",
+    "morgan": "^1.10.0",
+    "multer": "^2.0.2",
+    "multer-storage-cloudinary": "^4.0.0",
+    "socket.io": "^4.8.1",
+    "xss-clean": "^0.1.4"
+  },
+  "devDependencies": {
+    "artillery": "^2.0.10",
+    "nodemon": "^3.1.10"
+  }
+}
