@@ -17,7 +17,7 @@ const generateToken = (userId) => {
   return jwt.sign(
     { userId }, // Data stored in token (user ID)
     process.env.JWT_SECRET || 'your-secret-key-change-in-production', // Secret key
-    { expiresIn: '30d' } // Token expires in 30 days
+    { expiresIn: '20d' } // Token expires in 20 days
   )
 }
 

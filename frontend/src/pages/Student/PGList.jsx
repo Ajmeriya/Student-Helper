@@ -4,6 +4,7 @@ import PGCard from '../../components/PG/PGCard'
 import FilterPanel from '../../components/Common/FilterPanel'
 import { FaSearch, FaFilter, FaTimes } from 'react-icons/fa'
 import { motion } from 'framer-motion'
+import { API_BASE_URL } from '../../utils/constants'
 
 const PGList = () => {
   const { user } = useAuth()
@@ -26,100 +27,88 @@ const PGList = () => {
   })
 
   useEffect(() => {
-    // TODO: Replace with actual API call
-    // Fetch PGs based on user's city
-    const mockPGs = [
-      {
-        id: '1',
-        title: 'Comfortable PG near College',
-        location: 'Nadiad',
-        price: 5000,
-        bedrooms: 2,
-        bathrooms: 1,
-        ac: true,
-        furnished: true,
-        ownerOnFirstFloor: true,
-        distanceToCollege: 2.5,
-        images: []
-      },
-      {
-        id: '2',
-        title: 'Spacious PG with AC',
-        location: 'Nadiad',
-        price: 6000,
-        bedrooms: 3,
-        bathrooms: 2,
-        ac: true,
-        furnished: false,
-        ownerOnFirstFloor: false,
-        distanceToCollege: 3.2,
-        images: []
+    const fetchPGs = async () => {
+      if (!user?.city) {
+        setLoading(false)
+        return
       }
-    ]
-    setPgs(mockPGs)
-    setFilteredPGs(mockPGs)
-    setLoading(false)
-  }, [user?.city])
 
-  useEffect(() => {
-    let filtered = [...pgs]
+      try {
+        setLoading(true)
+        
+        // Build query parameters
+        const params = new URLSearchParams({
+          city: user.city
+        })
 
-    // Search filter
-    if (searchTerm) {
-      filtered = filtered.filter(pg =>
-        pg.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        pg.location.toLowerCase().includes(searchTerm.toLowerCase())
-      )
+        // Add filters to query if they exist
+        if (filters.minPrice) params.append('minPrice', filters.minPrice)
+        if (filters.maxPrice) params.append('maxPrice', filters.maxPrice)
+        if (filters.sharingType) params.append('sharingType', filters.sharingType)
+        if (filters.ac) params.append('ac', 'true')
+        if (filters.furnished) params.append('furnished', 'true')
+        if (filters.ownerOnFirstFloor) params.append('ownerOnFirstFloor', 'true')
+        if (filters.foodAvailable) params.append('foodAvailable', 'true')
+        if (filters.parking) params.append('parking', 'true')
+        if (filters.minDistance) params.append('minDistance', filters.minDistance)
+        if (filters.maxDistance) params.append('maxDistance', filters.maxDistance)
+        if (searchTerm) params.append('search', searchTerm)
+
+        // Call API to fetch PGs
+        const response = await fetch(`${API_BASE_URL}/pg?${params.toString()}`)
+        const result = await response.json()
+
+        if (result.success) {
+          // Map backend data to frontend format
+          const mappedPGs = result.pgs.map(pg => ({
+            id: pg._id || pg.id,
+            title: pg.title,
+            location: pg.location,
+            city: pg.city,
+            price: pg.price,
+            bedrooms: pg.bedrooms,
+            bathrooms: pg.bathrooms,
+            sharingType: pg.sharingType,
+            ac: pg.ac,
+            furnished: pg.furnished,
+            ownerOnFirstFloor: pg.ownerOnFirstFloor,
+            foodAvailable: pg.foodAvailable,
+            parking: pg.parking,
+            distanceToCollege: pg.distanceToCollege || 0,
+            images: pg.images || [],
+            videos: pg.videos || [],
+            coordinates: pg.coordinates,
+            collegeName: pg.collegeName,
+            ...pg // Include all other fields
+          }))
+          
+          setPgs(mappedPGs)
+          setFilteredPGs(mappedPGs) // Set both - filtering is done by API
+        } else {
+          toast.error(result.message || 'Failed to fetch PGs')
+          setPgs([])
+          setFilteredPGs([])
+        }
+      } catch (error) {
+        console.error('Error fetching PGs:', error)
+        toast.error('Failed to fetch PGs')
+        setPgs([])
+        setFilteredPGs([])
+      } finally {
+        setLoading(false)
+      }
     }
 
-    // Price filter
-    if (filters.minPrice) {
-      filtered = filtered.filter(pg => pg.price >= parseInt(filters.minPrice))
-    }
-    if (filters.maxPrice) {
-      filtered = filtered.filter(pg => pg.price <= parseInt(filters.maxPrice))
-    }
+    // Debounce search term to avoid too many API calls
+    const timeoutId = setTimeout(() => {
+      fetchPGs()
+    }, searchTerm ? 500 : 0) // Wait 500ms if searching, otherwise fetch immediately
 
-    // AC filter
-    if (filters.ac) {
-      filtered = filtered.filter(pg => pg.ac)
-    }
+    return () => clearTimeout(timeoutId)
+  }, [user?.city, searchTerm, filters])
 
-    // Furnished filter
-    if (filters.furnished) {
-      filtered = filtered.filter(pg => pg.furnished)
-    }
-
-    // Owner on first floor filter
-    if (filters.ownerOnFirstFloor) {
-      filtered = filtered.filter(pg => pg.ownerOnFirstFloor)
-    }
-
-    // Sharing type filter
-    if (filters.sharingType) {
-      filtered = filtered.filter(pg => pg.sharingType === filters.sharingType)
-    }
-
-    // Food available filter
-    if (filters.foodAvailable) {
-      filtered = filtered.filter(pg => pg.foodAvailable)
-    }
-
-    // Parking filter
-    if (filters.parking) {
-      filtered = filtered.filter(pg => pg.parking)
-    }
-
-    // Distance filter
-    if (filters.minDistance) {
-      filtered = filtered.filter(pg => pg.distanceToCollege >= parseFloat(filters.minDistance))
-    }
-    if (filters.maxDistance) {
-      filtered = filtered.filter(pg => pg.distanceToCollege <= parseFloat(filters.maxDistance))
-    }
-
-    setFilteredPGs(filtered)
-  }, [pgs, searchTerm, filters])
+  // Client-side filtering removed - API handles all filtering
+  // This keeps the UI in sync with API results
 
   const handleFilterChange = (key, value) => {
     setFilters(prev => ({

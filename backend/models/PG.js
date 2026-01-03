@@ -116,6 +116,37 @@ const pgSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  
+  // PG Status (available, sold, onRent)
+  status: {
+    type: String,
+    enum: ['available', 'sold', 'onRent'],
+    default: 'available'
+  },
+  
+  // Rental period (in months) - for onRent status
+  rentalPeriod: {
+    type: Number,
+    default: null // null means not specified
+  },
+  
+  // Sold date (when marked as sold)
+  soldDate: {
+    type: Date,
+    default: null
+  },
+  
+  // Rental start date (when marked as onRent)
+  rentalStartDate: {
+    type: Date,
+    default: null
+  },
+  
+  // Rental end date (calculated from rentalStartDate + rentalPeriod)
+  rentalEndDate: {
+    type: Date,
+    default: null
   }
 }, {
   timestamps: true // Automatically adds createdAt and updatedAt

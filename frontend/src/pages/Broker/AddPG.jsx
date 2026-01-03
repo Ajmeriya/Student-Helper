@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useForm } from 'react-hook-form'
 import MapComponent from '../../components/Common/MapComponent'
 import toast from 'react-hot-toast'
+import { API_BASE_URL } from '../../utils/constants'
 
 const AddPG = () => {
   const { user } = useAuth()
@@ -43,30 +44,83 @@ const AddPG = () => {
 
     setLoading(true)
     try {
-      // TODO: Replace with actual API call
-      const pgData = {
-        ...data,
-        city: user.city,
-        images: images.length > 0 ? images.map(img => URL.createObjectURL(img)) : [],
-        videos: videos.length > 0 ? videos.map(vid => URL.createObjectURL(vid)) : [],
-        coordinates,
-        brokerId: user.id,
-        // Convert instructions to rules array if needed
-        rules: data.instructions ? data.instructions.split('\n').filter(r => r.trim()) : [],
-        instructions: data.instructions
+      // Get auth token
+      const token = localStorage.getItem('token')
+      if (!token) {
+        toast.error('Please login again')
+        navigate('/login')
+        return
       }
+
+      // Create FormData for file uploads
+      const formData = new FormData()
       
-      console.log('PG Data:', pgData)
-      
-      // Navigate to My PGs page and show the newly added PG
-      navigate('/broker/my-pgs', { 
-        state: { 
-          newPG: pgData,
-          showSuccess: true 
-        } 
+      // Add text fields
+      formData.append('title', data.title)
+      formData.append('location', data.location)
+      formData.append('city', user.city)
+      formData.append('collegeName', data.collegeName)
+      formData.append('sharingType', data.sharingType)
+      formData.append('bedrooms', parseInt(data.bedrooms))
+      formData.append('bathrooms', parseInt(data.bathrooms))
+      if (data.floorNumber) formData.append('floorNumber', parseInt(data.floorNumber))
+      formData.append('preferredTenant', data.preferredTenant || 'Both')
+      formData.append('price', parseFloat(data.price))
+      if (data.securityDeposit) formData.append('securityDeposit', parseFloat(data.securityDeposit))
+      if (data.maintenance) formData.append('maintenance', parseFloat(data.maintenance))
+      formData.append('ac', data.ac || false)
+      formData.append('furnished', data.furnished || false)
+      formData.append('ownerOnFirstFloor', data.ownerOnFirstFloor || false)
+      formData.append('foodAvailable', data.foodAvailable || false)
+      formData.append('powerBackup', data.powerBackup || false)
+      formData.append('parking', data.parking || false)
+      formData.append('waterSupply', data.waterSupply || '24x7')
+      if (data.availabilityDate) formData.append('availabilityDate', data.availabilityDate)
+      if (data.nearbyLandmarks) formData.append('nearbyLandmarks', data.nearbyLandmarks)
+      if (data.instructions) formData.append('instructions', data.instructions)
+      formData.append('coordinates[lat]', coordinates.lat)
+      formData.append('coordinates[lng]', coordinates.lng)
+
+      // Add images
+      if (images.length > 0) {
+        images.forEach((image) => {
+          formData.append('images', image)
+        })
+      }
+
+      // Add videos
+      if (videos.length > 0) {
+        videos.forEach((video) => {
+          formData.append('videos', video)
+        })
+      }
+
+      // Call API to create PG with file uploads
+      const response = await fetch(`${API_BASE_URL}/pg`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+          // Don't set Content-Type - browser will set it with boundary for FormData
+        },
+        body: formData
       })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to create PG')
+      }
+
+      if (result.success) {
+        toast.success('PG created successfully!')
+        // Navigate to My PGs page
+        navigate('/broker/my-pgs', { state: { showSuccess: true } })
+      } else {
+        throw new Error(result.message || 'Failed to create PG')
+      }
     } catch (error) {
-      toast.error('Failed to add PG')
+      console.error('Error creating PG:', error)
+      toast.error(error.message || 'Failed to add PG')
     } finally {
       setLoading(false)
     }

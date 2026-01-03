@@ -18,6 +18,7 @@ import ReactPlayer from 'react-player'
 import MapComponent from '../../components/Common/MapComponent'
 import PricePrediction from '../../components/PG/PricePrediction'
 import toast from 'react-hot-toast'
+import { API_BASE_URL } from '../../utils/constants'
 
 const PGDetails = () => {
   const { id } = useParams()
@@ -28,36 +29,77 @@ const PGDetails = () => {
   const [activeTab, setActiveTab] = useState('overview')
 
   useEffect(() => {
-    // TODO: Replace with actual API call
-    const mockPG = {
-      id: id,
-      title: 'Comfortable PG near College',
-      location: 'Nadiad',
-      address: '123 Main Street, Nadiad',
-      price: 5000,
-      bedrooms: 2,
-      bathrooms: 1,
-      ac: true,
-      furnished: true,
-      ownerOnFirstFloor: true,
-      distanceToCollege: 2.5,
-      collegeName: 'Example College',
-      specialInstructions: 'No smoking, No pets allowed',
-      rules: ['No loud music after 10 PM', 'Kitchen access from 6 AM to 10 PM'],
-      images: [],
-      videos: [],
-      coordinates: { lat: 22.6944, lng: 72.8606 },
-      broker: {
-        name: 'John Broker',
-        id: 'broker1'
+    const fetchPG = async () => {
+      try {
+        setLoading(true)
+        
+        const response = await fetch(`${API_BASE_URL}/pg/${id}`)
+        const result = await response.json()
+
+        if (result.success && result.pg) {
+          // Map backend data to frontend format
+          const pgData = {
+            id: result.pg._id || result.pg.id,
+            title: result.pg.title,
+            location: result.pg.location,
+            address: result.pg.location, // Use location as address
+            price: result.pg.price,
+            bedrooms: result.pg.bedrooms,
+            bathrooms: result.pg.bathrooms,
+            sharingType: result.pg.sharingType,
+            floorNumber: result.pg.floorNumber,
+            ac: result.pg.ac,
+            furnished: result.pg.furnished,
+            ownerOnFirstFloor: result.pg.ownerOnFirstFloor,
+            foodAvailable: result.pg.foodAvailable,
+            powerBackup: result.pg.powerBackup,
+            parking: result.pg.parking,
+            waterSupply: result.pg.waterSupply,
+            distanceToCollege: result.pg.distanceToCollege || 0,
+            collegeName: result.pg.collegeName,
+            instructions: result.pg.instructions,
+            nearbyLandmarks: result.pg.nearbyLandmarks,
+            preferredTenant: result.pg.preferredTenant,
+            availabilityDate: result.pg.availabilityDate,
+            securityDeposit: result.pg.securityDeposit,
+            maintenance: result.pg.maintenance,
+            images: result.pg.images || [],
+            videos: result.pg.videos || [],
+            coordinates: result.pg.coordinates,
+            broker: result.pg.broker ? {
+              name: result.pg.broker.name,
+              email: result.pg.broker.email,
+              phoneNumber: result.pg.broker.phoneNumber,
+              id: result.pg.broker._id || result.pg.broker.id
+            } : null,
+            ...result.pg // Include all other fields
+          }
+          
+          setPg(pgData)
+        } else {
+          toast.error(result.message || 'PG not found')
+          navigate('/student/pgs')
+        }
+      } catch (error) {
+        console.error('Error fetching PG:', error)
+        toast.error('Failed to fetch PG details')
+        navigate('/student/pgs')
+      } finally {
+        setLoading(false)
       }
     }
-    setPg(mockPG)
-    setLoading(false)
-  }, [id])
+
+    if (id) {
+      fetchPG()
+    }
+  }, [id, navigate])
 
   const handleContact = () => {
-    navigate(`/chat?user=${pg.broker.id}&property=${id}&type=pg`)
+    if (pg && pg.broker && pg.broker.id) {
+      navigate(`/chat?user=${pg.broker.id}&property=${id}&type=pg`)
+    } else {
+      toast.error('Broker information not available')
+    }
   }
 
   if (loading) {
@@ -76,9 +118,16 @@ const PGDetails = () => {
     )
   }
 
-  const galleryImages = pg.images.length > 0 
-    ? pg.images.map(img => ({ original: img, thumbnail: img }))
-    : [{ original: '/placeholder.jpg', thumbnail: '/placeholder.jpg' }]
+  const galleryImages = pg.images && pg.images.length > 0 
+    ? pg.images.map(img => ({ 
+        original: img, 
+        thumbnail: img,
+        loading: 'lazy'
+      }))
+    : [{ 
+        original: 'https://via.placeholder.com/800x600?text=No+Image+Available', 
+        thumbnail: 'https://via.placeholder.com/150x100?text=No+Image' 
+      }]
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -88,7 +137,8 @@ const PGDetails = () => {
           <h1 className="text-3xl font-bold text-gray-900 mb-2">{pg.title}</h1>
           <div className="flex items-center text-gray-600 mb-4">
             <FaMapMarkerAlt className="mr-2" />
-            <span>{pg.address}</span>
+            <span>{pg.location || pg.address}</span>
+            {pg.city && <span className="ml-2 text-gray-400">, {pg.city}</span>}
           </div>
           <div className="flex items-center justify-between">
             <div className="flex items-center text-primary-600 font-bold text-2xl">
@@ -114,44 +164,164 @@ const PGDetails = () => {
               <div className="flex space-x-4 mb-4">
                 <button
                   onClick={() => setActiveTab('overview')}
-                  className={`px-4 py-2 rounded-lg ${
+                  className={`px-4 py-2 rounded-lg transition ${
                     activeTab === 'overview' 
                       ? 'bg-primary-600 text-white' 
-                      : 'bg-gray-200 text-gray-700'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                   }`}
                 >
                   <FaImages className="inline mr-2" />
-                  Photos
+                  Photos {pg.images && pg.images.length > 0 && `(${pg.images.length})`}
                 </button>
                 {pg.videos && pg.videos.length > 0 && (
                   <button
                     onClick={() => setActiveTab('video')}
-                    className={`px-4 py-2 rounded-lg ${
+                    className={`px-4 py-2 rounded-lg transition ${
                       activeTab === 'video' 
                         ? 'bg-primary-600 text-white' 
-                        : 'bg-gray-200 text-gray-700'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                     }`}
                   >
                     <FaVideo className="inline mr-2" />
-                    Videos
+                    Videos ({pg.videos.length})
                   </button>
                 )}
               </div>
               
               {activeTab === 'overview' && (
-                <div className="h-96">
-                  <ImageGallery items={galleryImages} showThumbnails={true} />
+                <div className="w-full">
+                  {galleryImages && galleryImages.length > 0 ? (
+                    <div className="image-gallery-container">
+                      <style>{`
+                        .image-gallery-container {
+                          width: 100%;
+                          overflow: hidden;
+                        }
+                        .image-gallery-container .image-gallery {
+                          width: 100%;
+                          line-height: 0;
+                        }
+                        .image-gallery-container .image-gallery-content {
+                          width: 100%;
+                          position: relative;
+                        }
+                        .image-gallery-container .image-gallery-slide-wrapper {
+                          width: 100%;
+                          position: relative;
+                        }
+                        .image-gallery-container .image-gallery-slide {
+                          width: 100%;
+                          height: auto;
+                          min-height: 400px;
+                          max-height: 600px;
+                        }
+                        .image-gallery-container .image-gallery-slide img {
+                          width: 100%;
+                          height: 100%;
+                          min-height: 400px;
+                          max-height: 600px;
+                          object-fit: contain;
+                          object-position: center;
+                          background-color: #f3f4f6;
+                        }
+                        .image-gallery-container .image-gallery-thumbnail {
+                          width: 100px;
+                          height: 75px;
+                          margin: 0 4px;
+                          border-radius: 4px;
+                          overflow: hidden;
+                        }
+                        .image-gallery-container .image-gallery-thumbnail img {
+                          width: 100%;
+                          height: 100%;
+                          object-fit: cover;
+                          object-position: center;
+                        }
+                        .image-gallery-container .image-gallery-thumbnails {
+                          padding: 15px 0;
+                          text-align: center;
+                          background-color: #f9fafb;
+                          border-top: 1px solid #e5e7eb;
+                        }
+                        .image-gallery-container .image-gallery-thumbnail.active,
+                        .image-gallery-container .image-gallery-thumbnail:hover {
+                          border: 3px solid #3b82f6;
+                          opacity: 1;
+                        }
+                        .image-gallery-container .image-gallery-thumbnail:not(.active) {
+                          opacity: 0.7;
+                        }
+                        .image-gallery-container .image-gallery-icon {
+                          color: #3b82f6;
+                        }
+                        @media (max-width: 768px) {
+                          .image-gallery-container .image-gallery-slide img {
+                            min-height: 300px;
+                            max-height: 400px;
+                          }
+                          .image-gallery-container .image-gallery-thumbnail {
+                            width: 80px;
+                            height: 60px;
+                          }
+                        }
+                      `}</style>
+                      <ImageGallery 
+                        items={galleryImages} 
+                        showThumbnails={galleryImages.length > 1}
+                        showFullscreenButton={true}
+                        showPlayButton={false}
+                        showBullets={false}
+                        autoPlay={false}
+                        slideInterval={3000}
+                        thumbnailPosition="bottom"
+                        showNav={galleryImages.length > 1}
+                        lazyLoad={true}
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-full h-96 bg-gray-200 rounded-lg flex items-center justify-center">
+                      <div className="text-center text-gray-500">
+                        <FaImages className="text-4xl mx-auto mb-2" />
+                        <p>No images available</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               
               {activeTab === 'video' && pg.videos && pg.videos.length > 0 && (
-                <div className="h-96">
-                  <ReactPlayer
-                    url={pg.videos[0]}
-                    width="100%"
-                    height="100%"
-                    controls
-                  />
+                <div className="w-full">
+                  <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+                    <div className="absolute inset-0">
+                      <ReactPlayer
+                        url={pg.videos[0]}
+                        width="100%"
+                        height="100%"
+                        controls
+                        style={{ position: 'absolute', top: 0, left: 0 }}
+                      />
+                    </div>
+                  </div>
+                  {pg.videos.length > 1 && (
+                    <div className="mt-4">
+                      <p className="text-sm text-gray-600 mb-2">More Videos:</p>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        {pg.videos.slice(1).map((video, index) => (
+                          <div key={index} className="relative" style={{ paddingBottom: '56.25%' }}>
+                            <div className="absolute inset-0">
+                              <ReactPlayer
+                                url={video}
+                                width="100%"
+                                height="100%"
+                                controls
+                                style={{ position: 'absolute', top: 0, left: 0 }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
