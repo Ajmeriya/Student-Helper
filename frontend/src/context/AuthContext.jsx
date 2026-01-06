@@ -48,7 +48,18 @@ export const AuthProvider = ({ children }) => {
 
       if (data.success) {
         // Store token and user data
-        localStorage.setItem('token', data.token)
+        const token = data.token
+        if (!token) {
+          throw new Error('No token received from server')
+        }
+        
+        // Verify token format (should be a valid JWT)
+        const tokenParts = token.split('.')
+        if (tokenParts.length !== 3) {
+          throw new Error('Invalid token format received')
+        }
+        
+        localStorage.setItem('token', token)
         setUser(data.user)
         localStorage.setItem('user', JSON.stringify(data.user))
         toast.success('Login successful!')

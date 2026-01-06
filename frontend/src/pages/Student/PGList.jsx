@@ -36,10 +36,19 @@ const PGList = () => {
       try {
         setLoading(true)
         
+        // Get user's college location for distance calculation
+        const userData = JSON.parse(localStorage.getItem('user') || '{}')
+        const collegeLocation = userData.collegeLocation?.coordinates
+        
         // Build query parameters
         const params = new URLSearchParams({
           city: user.city
         })
+        
+        // Add college location if available for distance calculation
+        if (collegeLocation && collegeLocation.lat && collegeLocation.lng) {
+          params.append('collegeLocation', JSON.stringify(collegeLocation))
+        }
 
         // Add filters to query if they exist
         if (filters.minPrice) params.append('minPrice', filters.minPrice)

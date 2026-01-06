@@ -4,6 +4,8 @@ import HostelCard from '../../components/Hostel/HostelCard'
 import FilterPanel from '../../components/Common/FilterPanel'
 import { FaSearch, FaFilter, FaTimes } from 'react-icons/fa'
 import { motion } from 'framer-motion'
+import { API_BASE_URL } from '../../utils/constants'
+import toast from 'react-hot-toast'
 
 const HostelList = () => {
   const { user } = useAuth()
@@ -24,83 +26,81 @@ const HostelList = () => {
     security: false
   })
 
-  useEffect(() => {
-    // TODO: Replace with actual API call
-    const mockHostels = [
-      {
-        id: '1',
-        name: 'Comfort Hostel',
-        location: 'Nadiad',
-        gender: 'boys',
-        price: 8000,
-        roomsAvailable: 5,
-        mess: true,
-        wifi: true,
-        laundry: true,
-        gym: false,
-        images: []
-      },
-      {
-        id: '2',
-        name: 'Premium Girls Hostel',
-        location: 'Nadiad',
-        gender: 'girls',
-        price: 10000,
-        roomsAvailable: 3,
-        mess: true,
-        wifi: true,
-        laundry: true,
-        gym: true,
-        images: []
+  const fetchHostels = async () => {
+    try {
+      setLoading(true)
+      
+      // Build query parameters
+      const params = new URLSearchParams()
+      params.append('city', user.city)
+      
+      // Add filters to query
+      if (filters.gender) params.append('gender', filters.gender)
+      if (filters.minPrice) params.append('minFees', filters.minPrice)
+      if (filters.maxPrice) params.append('maxFees', filters.maxPrice)
+      
+      // Add facility filters
+      const facilityList = []
+      if (filters.mess) facilityList.push('mess')
+      if (filters.wifi) facilityList.push('wifi')
+      if (filters.laundry) facilityList.push('laundry')
+      if (filters.gym) facilityList.push('gym')
+      if (filters.security) facilityList.push('security')
+      if (facilityList.length > 0) {
+        params.append('facilities', facilityList.join(','))
       }
-    ]
-    setHostels(mockHostels)
-    setFilteredHostels(mockHostels)
-    setLoading(false)
-  }, [user?.city])
+      
+      if (searchTerm) params.append('search', searchTerm)
+      
+      const response = await fetch(`${API_BASE_URL}/hostel?${params.toString()}`)
+      const result = await response.json()
+      
+      if (result.success) {
+        // Map backend data to frontend format
+        const hostelsList = result.hostels.map(hostel => ({
+          id: hostel._id || hostel.id,
+          name: hostel.name,
+          location: hostel.location,
+          address: hostel.address,
+          city: hostel.city,
+          gender: hostel.gender,
+          price: hostel.fees,
+          feesPeriod: hostel.feesPeriod,
+          totalRooms: hostel.totalRooms,
+          roomsAvailable: hostel.availableRooms,
+          facilities: hostel.facilities || {},
+          images: hostel.images || [],
+          videos: hostel.videos || [],
+          description: hostel.description,
+          rules: hostel.rules,
+          coordinates: hostel.coordinates,
+          status: hostel.status,
+          admin: hostel.admin
+        }))
+        
+        setHostels(hostelsList)
+        setFilteredHostels(hostelsList)
+      } else {
+        toast.error(result.message || 'Failed to fetch hostels')
+        setHostels([])
+        setFilteredHostels([])
+      }
+    } catch (error) {
+      console.error('Error fetching hostels:', error)
+      toast.error('Failed to fetch hostels: ' + (error.message || 'Unknown error'))
+      setHostels([])
+      setFilteredHostels([])
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    let filtered = [...hostels]
-
-    if (searchTerm) {
-      filtered = filtered.filter(hostel =>
-        hostel.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        hostel.location.toLowerCase().includes(searchTerm.toLowerCase())
-      )
+    if (user?.city) {
+      fetchHostels()
     }
-
-    if (filters.minPrice) {
-      filtered = filtered.filter(hostel => hostel.price >= parseInt(filters.minPrice))
-    }
-    if (filters.maxPrice) {
-      filtered = filtered.filter(hostel => hostel.price <= parseInt(filters.maxPrice))
-    }
-
-    if (filters.gender) {
-      filtered = filtered.filter(hostel => hostel.gender === filters.gender)
-    }
-
-    if (filters.mess) {
-      filtered = filtered.filter(hostel => hostel.mess)
-    }
-    if (filters.wifi) {
-      filtered = filtered.filter(hostel => hostel.wifi)
-    }
-    if (filters.laundry) {
-      filtered = filtered.filter(hostel => hostel.laundry)
-    }
-    if (filters.gym) {
-      filtered = filtered.filter(hostel => hostel.gym)
-    }
-    if (filters.studyRoom) {
-      filtered = filtered.filter(hostel => hostel.studyRoom)
-    }
-    if (filters.security) {
-      filtered = filtered.filter(hostel => hostel.security)
-    }
-
-    setFilteredHostels(filtered)
-  }, [hostels, searchTerm, filters])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.city, filters, searchTerm])
 
   const handleFilterChange = (key, value) => {
     setFilters(prev => ({

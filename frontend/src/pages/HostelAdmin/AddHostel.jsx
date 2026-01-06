@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useForm } from 'react-hook-form'
 import MapComponent from '../../components/Common/MapComponent'
 import toast from 'react-hot-toast'
+import { API_BASE_URL } from '../../utils/constants'
 
 const AddHostel = () => {
   const { user } = useAuth()
@@ -18,10 +19,11 @@ const AddHostel = () => {
     wifi: false,
     laundry: false,
     gym: false,
-    studyRoom: false,
-    commonArea: false,
+    library: false,
+    parking: false,
     security: false,
-    medical: false
+    powerBackup: false,
+    waterSupply: false
   })
 
   const handleImageUpload = (e) => {
@@ -56,21 +58,115 @@ const AddHostel = () => {
 
     setLoading(true)
     try {
-      const hostelData = {
-        ...data,
-        city: user.city,
-        images,
-        videos,
-        coordinates,
-        facilities,
-        adminId: user.id
+      // Get auth token
+      const token = localStorage.getItem('token')
+      if (!token) {
+        toast.error('Please login again')
+        navigate('/login')
+        return
+      }
+
+      // Create FormData for file uploads
+      const formData = new FormData()
+      
+      // Basic information
+      formData.append('name', data.name)
+      formData.append('location', data.location)
+      formData.append('city', user.city || data.city)
+      if (data.address) formData.append('address', data.address)
+      formData.append('gender', data.gender)
+      formData.append('totalRooms', data.totalRooms)
+      formData.append('availableRooms', data.roomsAvailable || data.availableRooms)
+      formData.append('fees', data.price || data.fees)
+      formData.append('feesPeriod', data.feesPeriod || 'monthly')
+      
+      // Send coordinates as separate parameters to avoid Spring binding issues
+      if (coordinates && coordinates.lat && coordinates.lng) {
+        formData.append('latitude', coordinates.lat)
+        formData.append('longitude', coordinates.lng)
       }
       
-      console.log('Hostel Data:', hostelData)
-      toast.success('Hostel added successfully!')
-      navigate('/hostel-admin/my-hostels')
+      // Facilities (send as individual fields)
+      Object.keys(facilities).forEach(facility => {
+        formData.append(`facilities[${facility}]`, facilities[facility] ? 'true' : 'false')
+      })
+      
+      // Optional fields
+      if (data.description) formData.append('description', data.description)
+      if (data.rules) formData.append('rules', data.rules)
+      if (data.contactNumber) formData.append('contactNumber', data.contactNumber)
+      if (data.contactEmail) formData.append('contactEmail', data.contactEmail)
+      
+      // Add images
+      images.forEach((image, index) => {
+        formData.append('images', image)
+      })
+      
+      // Add videos
+      videos.forEach((video, index) => {
+        formData.append('videos', video)
+      })
+      
+      console.log('📤 Uploading hostel data...', {
+        name: data.name,
+        city: user.city,
+        imagesCount: images.length,
+        videosCount: videos.length
+      })
+      
+      console.log('📤 Sending request to:', `${API_BASE_URL}/hostel`)
+      console.log('📤 Authorization header:', `Bearer ${token ? token.substring(0, 20) + '...' : 'MISSING'}`)
+      
+      const response = await fetch(`${API_BASE_URL}/hostel`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+          // Don't set Content-Type - let browser set it with boundary for FormData
+        },
+        body: formData
+      })
+
+      console.log('📥 Response status:', response.status, response.statusText)
+
+      // Check if response has JSON content
+      const contentType = response.headers.get('content-type')
+      let result
+      if (contentType && contentType.includes('application/json')) {
+        result = await response.json()
+      } else {
+        // If not JSON, read as text for error message
+        const text = await response.text()
+        throw new Error(`Server error: ${response.status} ${response.statusText}. ${text}`)
+      }
+
+      console.log('📦 API Response:', result)
+
+      if (!response.ok) {
+        // Check if it's an authentication error
+        if (response.status === 401) {
+          console.error('❌ Authentication failed! Status:', response.status)
+          console.error('❌ Error response:', result)
+          toast.error(result.message || 'Authentication failed. Please log in again.')
+          // Clear old token and redirect to login
+          console.log('🧹 Clearing localStorage...')
+          localStorage.clear()
+          setTimeout(() => {
+            navigate('/login')
+          }, 1000)
+          return
+        }
+        throw new Error(result.message || result.error || 'Failed to create hostel')
+      }
+
+      if (result.success) {
+        toast.success('Hostel added successfully!')
+        navigate('/hostel-admin/my-hostels')
+      } else {
+        throw new Error(result.message || 'Failed to create hostel')
+      }
     } catch (error) {
-      toast.error('Failed to add hostel')
+      console.error('Error creating hostel:', error)
+      toast.error(error.message || 'Failed to add hostel')
     } finally {
       setLoading(false)
     }
@@ -257,20 +353,20 @@ const AddHostel = () => {
               <label className="flex items-center">
                 <input
                   type="checkbox"
-                  checked={facilities.studyRoom}
-                  onChange={() => handleFacilityChange('studyRoom')}
+                  checked={facilities.library}
+                  onChange={() => handleFacilityChange('library')}
                   className="mr-2"
                 />
-                <span className="text-sm">Study Room</span>
+                <span className="text-sm">Library</span>
               </label>
               <label className="flex items-center">
                 <input
                   type="checkbox"
-                  checked={facilities.commonArea}
-                  onChange={() => handleFacilityChange('commonArea')}
+                  checked={facilities.parking}
+                  onChange={() => handleFacilityChange('parking')}
                   className="mr-2"
                 />
-                <span className="text-sm">Common Area</span>
+                <span className="text-sm">Parking</span>
               </label>
               <label className="flex items-center">
                 <input
@@ -284,63 +380,52 @@ const AddHostel = () => {
               <label className="flex items-center">
                 <input
                   type="checkbox"
-                  checked={facilities.medical}
-                  onChange={() => handleFacilityChange('medical')}
+                  checked={facilities.powerBackup}
+                  onChange={() => handleFacilityChange('powerBackup')}
                   className="mr-2"
                 />
-                <span className="text-sm">Medical Facility</span>
+                <span className="text-sm">Power Backup</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={facilities.waterSupply}
+                  onChange={() => handleFacilityChange('waterSupply')}
+                  className="mr-2"
+                />
+                <span className="text-sm">Water Supply</span>
               </label>
             </div>
           </div>
 
-          {/* Policies & Timings */}
+          {/* Additional Information */}
           <div>
-            <h2 className="text-xl font-semibold mb-4">Policies & Timings</h2>
+            <h2 className="text-xl font-semibold mb-4">Additional Information</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Mess Timings
+                  Description
                 </label>
-                <input
-                  {...register('messTimings')}
+                <textarea
+                  {...register('description')}
+                  rows="3"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  placeholder="e.g., 7:30 AM - 9:30 PM"
+                  placeholder="Describe your hostel..."
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Curfew Timings
+                  Rules & Regulations *
                 </label>
-                <input
-                  {...register('curfewTimings')}
+                <textarea
+                  {...register('rules', { required: 'Rules are required' })}
+                  rows="3"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  placeholder="e.g., 10:00 PM (if applicable)"
+                  placeholder="Hostel rules and regulations (e.g., No smoking, No loud music after 10 PM, etc.)"
                 />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Visitor Policy
-                </label>
-                <select
-                  {...register('visitorPolicy')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                >
-                  <option value="">Select</option>
-                  <option value="allowed">Visitors Allowed</option>
-                  <option value="restricted">Restricted Hours</option>
-                  <option value="notAllowed">Not Allowed</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Security Deposit (₹)
-                </label>
-                <input
-                  type="number"
-                  {...register('securityDeposit', { min: 0 })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  placeholder="Optional"
-                />
+                {errors.rules && (
+                  <p className="mt-1 text-sm text-red-600">{errors.rules.message}</p>
+                )}
               </div>
             </div>
           </div>

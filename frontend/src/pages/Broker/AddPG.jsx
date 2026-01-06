@@ -46,11 +46,17 @@ const AddPG = () => {
     try {
       // Get auth token
       const token = localStorage.getItem('token')
+      console.log('🔑 Token from localStorage:', token ? `${token.substring(0, 20)}...` : 'NOT FOUND')
+      
       if (!token) {
         toast.error('Please login again')
         navigate('/login')
         return
       }
+      
+      // Also check user data
+      const userData = localStorage.getItem('user')
+      console.log('👤 User data:', userData ? JSON.parse(userData) : 'NOT FOUND')
 
       // Create FormData for file uploads
       const formData = new FormData()
@@ -64,7 +70,7 @@ const AddPG = () => {
       formData.append('bedrooms', parseInt(data.bedrooms))
       formData.append('bathrooms', parseInt(data.bathrooms))
       if (data.floorNumber) formData.append('floorNumber', parseInt(data.floorNumber))
-      formData.append('preferredTenant', data.preferredTenant || 'Both')
+      formData.append('preferredTenant', data.preferredTenant || 'both')
       formData.append('price', parseFloat(data.price))
       if (data.securityDeposit) formData.append('securityDeposit', parseFloat(data.securityDeposit))
       if (data.maintenance) formData.append('maintenance', parseFloat(data.maintenance))
@@ -78,8 +84,11 @@ const AddPG = () => {
       if (data.availabilityDate) formData.append('availabilityDate', data.availabilityDate)
       if (data.nearbyLandmarks) formData.append('nearbyLandmarks', data.nearbyLandmarks)
       if (data.instructions) formData.append('instructions', data.instructions)
-      formData.append('coordinates[lat]', coordinates.lat)
-      formData.append('coordinates[lng]', coordinates.lng)
+      // Send coordinates as separate parameters to avoid Spring binding issues
+      if (coordinates && coordinates.lat && coordinates.lng) {
+        formData.append('latitude', coordinates.lat)
+        formData.append('longitude', coordinates.lng)
+      }
 
       // Add images
       if (images.length > 0) {
@@ -96,6 +105,9 @@ const AddPG = () => {
       }
 
       // Call API to create PG with file uploads
+      console.log('📤 Sending request to:', `${API_BASE_URL}/pg`)
+      console.log('📤 Authorization header:', `Bearer ${token ? token.substring(0, 20) + '...' : 'MISSING'}`)
+      
       const response = await fetch(`${API_BASE_URL}/pg`, {
         method: 'POST',
         headers: {
@@ -104,11 +116,35 @@ const AddPG = () => {
         },
         body: formData
       })
+      
+      console.log('📥 Response status:', response.status, response.statusText)
 
-      const result = await response.json()
+      // Check if response has JSON content
+      const contentType = response.headers.get('content-type')
+      let result
+      if (contentType && contentType.includes('application/json')) {
+        result = await response.json()
+      } else {
+        // If not JSON, read as text for error message
+        const text = await response.text()
+        throw new Error(`Server error: ${response.status} ${response.statusText}. ${text}`)
+      }
 
       if (!response.ok) {
-        throw new Error(result.message || 'Failed to create PG')
+        // Check if it's an authentication error and suggest re-login
+        if (response.status === 401) {
+          console.error('❌ Authentication failed! Status:', response.status)
+          console.error('❌ Error response:', result)
+          toast.error(result.message || 'Authentication failed. Please log in again.')
+          // Clear old token and redirect to login
+          console.log('🧹 Clearing localStorage...')
+          localStorage.clear()
+          setTimeout(() => {
+            navigate('/login')
+          }, 1000)
+          return
+        }
+        throw new Error(result.message || result.error || 'Failed to create PG')
       }
 
       if (result.success) {

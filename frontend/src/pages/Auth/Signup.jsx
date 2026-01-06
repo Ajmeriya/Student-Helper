@@ -10,6 +10,7 @@ import {
   FaUniversity
 } from 'react-icons/fa'
 import { motion } from 'framer-motion'
+import MapComponent from '../../components/Common/MapComponent'
 
 const Signup = () => {
   const [formData, setFormData] = useState({
@@ -20,10 +21,14 @@ const Signup = () => {
     phoneNumber: '',
     city: '',
     role: '',
-    collegeName: ''
+    collegeName: '',
+    collegeAddress: '',
+    workingAddress: ''
   })
   const [errors, setErrors] = useState({})
   const [loading, setLoading] = useState(false)
+  const [collegeLocation, setCollegeLocation] = useState(null)
+  const [geocodingAddress, setGeocodingAddress] = useState(false)
   const { signup } = useAuth()
   const navigate = useNavigate()
 
@@ -94,8 +99,16 @@ const Signup = () => {
       newErrors.role = 'Role is required'
     }
     
-    if (formData.role === 'student' && !formData.collegeName.trim()) {
-      newErrors.collegeName = 'College name is required for students'
+    // Only validate college name and location for students
+    if (formData.role === 'student') {
+      if (!formData.collegeName.trim()) {
+        newErrors.collegeName = 'College name is required for students'
+      }
+      // Require either address or map location
+      if (!formData.collegeAddress && !collegeLocation) {
+        newErrors.collegeAddress = 'Please provide college address or mark location on map'
+        newErrors.collegeLocation = 'Please provide college address or mark location on map'
+      }
     }
     
     setErrors(newErrors)
@@ -107,14 +120,33 @@ const Signup = () => {
     if (!validate()) return
 
     setLoading(true)
+    
+    // Ensure role is correctly formatted
+    let roleValue = formData.role
+    if (roleValue === 'hostelAdmin' || roleValue === 'Hostel Admin' || roleValue?.toLowerCase() === 'hosteladmin') {
+      roleValue = 'hostelAdmin' // Ensure camelCase
+    } else if (roleValue) {
+      roleValue = roleValue.toLowerCase() // student, broker
+    }
+    
+    console.log('📝 Frontend sending role:', { original: formData.role, normalized: roleValue })
+    
     const userData = {
       name: formData.fullName,
       email: formData.email,
       password: formData.password,
       phoneNumber: formData.phoneNumber,
       city: formData.city,
-      role: formData.role,
-      ...(formData.role === 'student' && { collegeName: formData.collegeName })
+      role: roleValue,
+      ...(formData.role === 'student' && { 
+        collegeName: formData.collegeName,
+        collegeLocation: collegeLocation ? {
+          coordinates: {
+            lat: collegeLocation.lat,
+            lng: collegeLocation.lng
+          }
+        } : undefined
+      })
     }
 
     const result = await signup(userData)
@@ -357,43 +389,108 @@ const Signup = () => {
               )}
             </div>
 
-            {/* College Name (only for students) */}
+            {/* College Name and Location (only for students) */}
             {formData.role === 'student' && (
-              <div className="md:col-span-2">
-                <label htmlFor="collegeName" className="block text-sm font-medium text-gray-700">
-                  College Name
-                </label>
-                <div className="mt-1 relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <FaUniversity className="h-5 w-5 text-gray-400" />
+              <>
+                <div className="md:col-span-2">
+                  <label htmlFor="collegeName" className="block text-sm font-medium text-gray-700">
+                    College Name <span className="text-red-500">*</span>
+                  </label>
+                  <div className="mt-1 relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <FaUniversity className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                      id="collegeName"
+                      name="collegeName"
+                      type="text"
+                      required
+                      value={formData.collegeName}
+                      onChange={handleChange}
+                      className={`appearance-none block w-full pl-10 pr-3 py-2 border ${
+                        errors.collegeName ? 'border-red-300' : 'border-gray-300'
+                      } rounded-md placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500`}
+                      placeholder="Enter your college name"
+                    />
                   </div>
-                  <input
-                    id="collegeName"
-                    name="collegeName"
-                    type="text"
-                    required
-                    value={formData.collegeName}
-                    onChange={handleChange}
-                    className={`appearance-none block w-full pl-10 pr-3 py-2 border ${
-                      errors.collegeName ? 'border-red-300' : 'border-gray-300'
-                    } rounded-md placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500`}
-                    placeholder="Enter your college name"
-                  />
+                  {errors.collegeName && (
+                    <p className="mt-1 text-sm text-red-600">{errors.collegeName}</p>
+                  )}
                 </div>
-                {errors.collegeName && (
-                  <p className="mt-1 text-sm text-red-600">{errors.collegeName}</p>
-                )}
-              </div>
+                
+                {/* College Address (Preferred - will be geocoded) */}
+                <div className="md:col-span-2">
+                  <label htmlFor="collegeAddress" className="block text-sm font-medium text-gray-700">
+                    College Address <span className="text-red-500">*</span>
+                    <span className="text-xs text-gray-500 ml-2">(Recommended - for accurate distance calculation)</span>
+                  </label>
+                  <div className="mt-1">
+                    <input
+                      id="collegeAddress"
+                      name="collegeAddress"
+                      type="text"
+                      required
+                      value={formData.collegeAddress}
+                      onChange={handleChange}
+                      className={`appearance-none block w-full px-3 py-2 border ${
+                        errors.collegeAddress ? 'border-red-300' : 'border-gray-300'
+                      } rounded-md placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500`}
+                      placeholder="e.g., Dharmsinh Desai University, College Road, Nadiad, Gujarat"
+                    />
+                  </div>
+                  {errors.collegeAddress && (
+                    <p className="mt-1 text-sm text-red-600">{errors.collegeAddress}</p>
+                  )}
+                  <p className="mt-1 text-xs text-gray-500">
+                    Enter full address for accurate road distance calculation. Or use map below.
+                  </p>
+                </div>
+                
+                {/* College Location Map (Alternative) */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Or Mark Your College Location on Map
+                    <span className="text-xs text-gray-500 ml-2">(Alternative to address)</span>
+                  </label>
+                  <div className="h-64 rounded-lg overflow-hidden border border-gray-300">
+                    <MapComponent
+                      center={formData.city === 'Nadiad' ? [22.6944, 72.8606] : 
+                              formData.city === 'Ahmedabad' ? [23.0225, 72.5714] :
+                              formData.city === 'Vadodara' ? [22.3072, 73.1812] :
+                              [22.6944, 72.8606]}
+                      markers={collegeLocation ? [{ lat: collegeLocation.lat, lng: collegeLocation.lng, title: formData.collegeName || 'College' }] : []}
+                      onMapClick={(e) => {
+                        const { lat, lng } = e.latlng
+                        setCollegeLocation({ lat, lng })
+                        if (errors.collegeLocation) {
+                          setErrors({ ...errors, collegeLocation: '' })
+                        }
+                      }}
+                    />
+                  </div>
+                  {collegeLocation && (
+                    <p className="mt-2 text-sm text-green-600">
+                      ✓ Location selected: {collegeLocation.lat.toFixed(4)}, {collegeLocation.lng.toFixed(4)}
+                    </p>
+                  )}
+                  {errors.collegeLocation && (
+                    <p className="mt-1 text-sm text-red-600">{errors.collegeLocation}</p>
+                  )}
+                  <p className="mt-1 text-xs text-gray-500">
+                    Click on the map to mark location if you don't have the full address.
+                  </p>
+                </div>
+              </>
             )}
           </div>
 
           <div>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || geocodingAddress}
               className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Creating account...' : 'Create Account'}
+              {geocodingAddress ? 'Geocoding address...' : loading ? 'Creating account...' : 'Create Account'}
             </button>
           </div>
         </form>

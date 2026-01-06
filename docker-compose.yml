@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: student-helper-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-Student_Helper}
+      MYSQL_USER: ${MYSQL_USER:-studenthelper}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-password}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - student-helper-network
+
+  backend:
+    build:
+      context: ./backend-spring
+      dockerfile: Dockerfile
+    container_name: student-helper-backend
+    environment:
+      SERVER_PORT: 5000
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-Student_Helper}
+      MYSQL_USERNAME: ${MYSQL_USER:-studenthelper}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-password}
+      HIBERNATE_DDL_AUTO: update
+      JWT_SECRET: ${JWT_SECRET:-change-this-secret-key-in-production-minimum-64-characters}
+      JWT_EXPIRATION: 1728000000
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      PAYMENT_MODE: dummy
+    ports:
+      - "5000:5000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - student-helper-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:5000/api}
+    container_name: student-helper-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - student-helper-network
+    restart: unless-stopped
+
+networks:
+  student-helper-network:
+    driver: bridge
+
+volumes:
+  mysql_data:
+

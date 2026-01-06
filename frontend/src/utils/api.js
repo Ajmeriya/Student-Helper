@@ -14,12 +14,8 @@ import { API_BASE_URL } from './constants.js'
  * Helper function to get auth token from localStorage
  */
 export const getAuthToken = () => {
-  const user = localStorage.getItem('user')
-  if (user) {
-    const userData = JSON.parse(user)
-    return userData.token || null
-  }
-  return null
+  // Token is stored directly in localStorage, not in the user object
+  return localStorage.getItem('token')
 }
 
 /**

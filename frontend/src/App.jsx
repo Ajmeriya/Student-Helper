@@ -16,6 +16,9 @@ import HostelList from './pages/Student/HostelList'
 import Marketplace from './pages/Student/Marketplace'
 import PGDetails from './pages/Student/PGDetails'
 import HostelDetails from './pages/Student/HostelDetails'
+import AddItem from './pages/Student/AddItem'
+import MyItems from './pages/Student/MyItems'
+import EditItem from './pages/Student/EditItem'
 
 // Broker Pages
 import BrokerDashboard from './pages/Broker/BrokerDashboard'
@@ -31,6 +34,9 @@ import MyHostels from './pages/HostelAdmin/MyHostels'
 
 // Chat
 import Chat from './pages/Chat/Chat'
+
+// Profile
+import EditProfile from './pages/Profile/EditProfile'
 
 // Home
 import Home from './pages/Home'
@@ -96,6 +102,38 @@ function App() {
                   </ProtectedRoute>
                 }
               />
+              <Route
+                path="/student/add-item"
+                element={
+                  <ProtectedRoute allowedRoles={['student']}>
+                    <AddItem />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/student/my-items"
+                element={
+                  <ProtectedRoute allowedRoles={['student']}>
+                    <MyItems />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/student/edit-item/:id"
+                element={
+                  <ProtectedRoute allowedRoles={['student']}>
+                    <EditItem />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/student/profile"
+                element={
+                  <ProtectedRoute allowedRoles={['student']}>
+                    <EditProfile />
+                  </ProtectedRoute>
+                }
+              />
 
               {/* Broker Routes */}
               <Route
@@ -130,6 +168,14 @@ function App() {
                   </ProtectedRoute>
                 }
               />
+              <Route
+                path="/broker/profile"
+                element={
+                  <ProtectedRoute allowedRoles={['broker']}>
+                    <EditProfile />
+                  </ProtectedRoute>
+                }
+              />
 
               {/* Hostel Admin Routes */}
               <Route
@@ -161,6 +207,14 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={['hostelAdmin']}>
                     <EditHostel />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/hostel-admin/profile"
+                element={
+                  <ProtectedRoute allowedRoles={['hostelAdmin']}>
+                    <EditProfile />
                   </ProtectedRoute>
                 }
               />

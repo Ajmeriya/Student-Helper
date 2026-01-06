@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import { FaPaperPlane, FaUser } from 'react-icons/fa'
+import { FaPaperPlane, FaUser, FaTrash, FaEllipsisV } from 'react-icons/fa'
 import { motion } from 'framer-motion'
+import { API_BASE_URL } from '../../utils/constants'
+import toast from 'react-hot-toast'
 
 const Chat = () => {
   const { user } = useAuth()
@@ -12,6 +14,7 @@ const Chat = () => {
   const [conversations, setConversations] = useState([])
   const [activeConversation, setActiveConversation] = useState(null)
   const [showConversations, setShowConversations] = useState(false)
+  const [hoveredMessageId, setHoveredMessageId] = useState(null)
   const messagesEndRef = useRef(null)
 
   const targetUserId = searchParams.get('user')
@@ -19,71 +22,263 @@ const Chat = () => {
   const type = searchParams.get('type')
 
   useEffect(() => {
-    // TODO: Replace with actual API call to fetch conversations
-    const mockConversations = [
-      {
-        id: '1',
-        userId: 'user1',
-        userName: 'John Doe',
-        lastMessage: 'Hello, is this PG still available?',
-        timestamp: new Date(),
-        unread: 2
-      }
-    ]
-    setConversations(mockConversations)
+    fetchConversations()
 
-    if (targetUserId && propertyId) {
+    if (targetUserId) {
       setActiveConversation({
-        userId: targetUserId,
-        propertyId,
-        type
+        userId: targetUserId.toString(), // Ensure it's a string
+        propertyId: propertyId ? propertyId.toString() : null,
+        type: type || null
       })
     }
   }, [targetUserId, propertyId, type])
 
-  useEffect(() => {
-    if (activeConversation) {
-      // TODO: Replace with actual API call to fetch messages
-      const mockMessages = [
-        {
-          id: '1',
-          senderId: activeConversation.userId,
-          senderName: 'John Doe',
-          text: 'Hello, is this PG still available?',
-          timestamp: new Date(Date.now() - 3600000)
-        },
-        {
-          id: '2',
-          senderId: user.id,
-          senderName: user.name,
-          text: 'Yes, it is available. Would you like to schedule a visit?',
-          timestamp: new Date(Date.now() - 1800000)
+  const fetchConversations = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) {
+        toast.error('Please login again')
+        return
+      }
+
+      const response = await fetch(`${API_BASE_URL}/message/conversations`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
-      ]
-      setMessages(mockMessages)
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        // Map backend conversations to frontend format
+        const mappedConversations = result.conversations.map(conv => ({
+          id: conv.user.id || conv.user._id,
+          userId: conv.user.id || conv.user._id,
+          userName: conv.user.name,
+          lastMessage: conv.lastMessage || 'No messages yet',
+          timestamp: conv.lastMessageTime || new Date(),
+          unread: conv.unreadCount || 0,
+          relatedTo: conv.relatedTo
+        }))
+        setConversations(mappedConversations)
+      } else {
+        toast.error(result.message || 'Failed to fetch conversations')
+        setConversations([])
+      }
+    } catch (error) {
+      console.error('Error fetching conversations:', error)
+      toast.error('Failed to fetch conversations: ' + (error.message || 'Unknown error'))
+      setConversations([])
     }
-  }, [activeConversation, user])
+  }
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (activeConversation && activeConversation.userId) {
+      // Initial fetch with errors shown
+      fetchMessages(activeConversation.userId, true)
+      
+      // Poll for new messages every 3 seconds (silent, no error toasts)
+      const interval = setInterval(() => {
+        fetchMessages(activeConversation.userId, false)
+      }, 3000)
+      
+      return () => clearInterval(interval)
+    } else {
+      setMessages([])
+    }
+  }, [activeConversation])
+
+  const fetchMessages = async (otherUserId, showErrors = true) => {
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) {
+        if (showErrors) toast.error('Please login again')
+        return
+      }
+
+      // Ensure otherUserId is a string
+      const userId = otherUserId?.toString()
+      if (!userId) {
+        return
+      }
+
+      const response = await fetch(`${API_BASE_URL}/message/${userId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Network error' }))
+        if (showErrors) {
+          toast.error(errorData.message || 'Failed to fetch messages')
+        }
+        return
+      }
+
+      const result = await response.json()
+
+      if (result.success) {
+        // Map backend messages to frontend format
+        const mappedMessages = result.messages.map(msg => ({
+          id: msg._id || msg.id,
+          senderId: (msg.sender._id || msg.sender.id)?.toString(),
+          senderName: msg.sender.name,
+          text: msg.content,
+          timestamp: new Date(msg.createdAt),
+          read: msg.read
+        }))
+        
+        // Sort messages by timestamp (oldest first) - like WhatsApp
+        const sortedMessages = mappedMessages.sort((a, b) => {
+          return a.timestamp.getTime() - b.timestamp.getTime()
+        })
+        
+        setMessages(sortedMessages)
+        
+        // Refresh conversations to update unread count (only on initial load, not on every poll)
+        if (showErrors) {
+          fetchConversations()
+        }
+      } else {
+        if (showErrors) {
+          toast.error(result.message || 'Failed to fetch messages')
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching messages:', error)
+      if (showErrors) {
+        toast.error('Failed to fetch messages: ' + (error.message || 'Unknown error'))
+      }
+    }
+  }
+
+  useEffect(() => {
+    // Scroll to bottom when messages change
+    // Always scroll to bottom on initial load, or if user is near bottom
+    if (messagesEndRef.current && messages.length > 0) {
+      const container = messagesEndRef.current.parentElement
+      if (container) {
+        const scrollHeight = container.scrollHeight
+        const scrollTop = container.scrollTop
+        const clientHeight = container.clientHeight
+        const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+        const isNearBottom = distanceFromBottom < 200 // Increased threshold to 200px
+        
+        // Always scroll to bottom on initial load (when messages first appear)
+        // Or if user is already near bottom (within 200px) - for new messages
+        if (isNearBottom || scrollTop === 0 || distanceFromBottom < 50) {
+          // Use setTimeout to ensure DOM is updated
+          setTimeout(() => {
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+          }, 100)
+        }
+      }
+    }
   }, [messages])
+  
+  // Also scroll to bottom when a new conversation is selected
+  useEffect(() => {
+    if (activeConversation && messagesEndRef.current) {
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+      }, 200)
+    }
+  }, [activeConversation])
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || !activeConversation) return
-
-    const message = {
-      id: Date.now().toString(),
-      senderId: user.id,
-      senderName: user.name,
-      text: newMessage,
-      timestamp: new Date()
+    if (!newMessage.trim() || !activeConversation || !activeConversation.userId) {
+      return
     }
 
-    setMessages(prev => [...prev, message])
+    const messageText = newMessage.trim()
     setNewMessage('')
 
-    // TODO: Replace with actual API call to send message
-    // await sendMessage(activeConversation.userId, newMessage)
+    // Optimistically add message to UI
+    const tempMessage = {
+      id: Date.now().toString(),
+      senderId: user._id || user.id,
+      senderName: user.name,
+      text: messageText,
+      timestamp: new Date(),
+      read: false
+    }
+    setMessages(prev => [...prev, tempMessage])
+
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) {
+        toast.error('Please login again')
+        return
+      }
+
+      // Prepare relatedTo if property info is available
+      const relatedTo = activeConversation.propertyId && activeConversation.type
+        ? {
+            type: activeConversation.type, // 'pg', 'hostel', or 'item'
+            id: activeConversation.propertyId
+          }
+        : undefined
+
+      // Ensure receiverId is a valid string
+      const receiverId = activeConversation.userId?.toString()
+      
+      if (!receiverId) {
+        toast.error('Invalid receiver ID')
+        setMessages(prev => prev.filter(msg => msg.id !== tempMessage.id))
+        setNewMessage(messageText)
+        return
+      }
+
+      const response = await fetch(`${API_BASE_URL}/message`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          receiverId: receiverId,
+          content: messageText,
+          relatedTo: relatedTo
+        })
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        // Replace temp message with real one from server
+        setMessages(prev => {
+          const filtered = prev.filter(msg => msg.id !== tempMessage.id)
+          const newMsg = {
+            id: result.data._id || result.data.id,
+            senderId: result.data.sender._id || result.data.sender.id,
+            senderName: result.data.sender.name,
+            text: result.data.content,
+            timestamp: new Date(result.data.createdAt),
+            read: result.data.read
+          }
+          // Add new message and sort by timestamp (oldest first)
+          const updated = [...filtered, newMsg]
+          return updated.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
+        })
+        
+        // Refresh conversations to update last message
+        fetchConversations()
+      } else {
+        // Remove temp message on error
+        setMessages(prev => prev.filter(msg => msg.id !== tempMessage.id))
+        toast.error(result.message || 'Failed to send message')
+        setNewMessage(messageText) // Restore message text
+      }
+    } catch (error) {
+      console.error('Error sending message:', error)
+      // Remove temp message on error
+      setMessages(prev => prev.filter(msg => msg.id !== tempMessage.id))
+      toast.error('Failed to send message: ' + (error.message || 'Unknown error'))
+      setNewMessage(messageText) // Restore message text
+    }
   }
 
   const formatTime = (date) => {
@@ -91,6 +286,69 @@ const Chat = () => {
       hour: '2-digit',
       minute: '2-digit'
     })
+  }
+
+  const handleDeleteMessage = async (messageId) => {
+    if (!window.confirm('Are you sure you want to delete this message?')) {
+      return
+    }
+
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) {
+        toast.error('Please login again')
+        return
+      }
+
+      // Convert messageId to number if it's a string (backend expects Long)
+      const idToDelete = typeof messageId === 'string' ? parseInt(messageId) : messageId
+
+      const response = await fetch(`${API_BASE_URL}/message/${idToDelete}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      // Check if response is OK before parsing JSON
+      if (!response.ok) {
+        // Try to parse error response
+        let errorData
+        try {
+          errorData = await response.json()
+        } catch (e) {
+          errorData = { message: `HTTP ${response.status}: ${response.statusText}` }
+        }
+        
+        if (response.status === 401) {
+          toast.error('Authentication required. Please login again.')
+          localStorage.removeItem('token')
+          localStorage.removeItem('user')
+          window.location.href = '/login'
+          return
+        }
+        
+        toast.error(errorData.message || 'Failed to delete message')
+        return
+      }
+
+      const result = await response.json()
+
+      if (result.success) {
+        // Remove message from state (handle both string and number IDs)
+        setMessages(prev => prev.filter(msg => {
+          const msgId = typeof msg.id === 'string' ? parseInt(msg.id) : msg.id
+          return msgId !== idToDelete
+        }))
+        toast.success('Message deleted successfully')
+      } else {
+        toast.error(result.message || 'Failed to delete message')
+      }
+    } catch (error) {
+      console.error('❌ Error deleting message:', error)
+      toast.error('Failed to delete message: ' + (error.message || 'Unknown error'))
+    }
   }
 
   return (
@@ -166,6 +424,13 @@ const Chat = () => {
                         <div className="flex-1 min-w-0">
                           <p className="font-semibold truncate">{conv.userName}</p>
                           <p className="text-sm text-gray-600 truncate">{conv.lastMessage}</p>
+                          {conv.relatedTo && (
+                            <p className="text-xs text-gray-400 mt-1">
+                              {conv.relatedTo.type === 'pg' && '📌 PG'}
+                              {conv.relatedTo.type === 'hostel' && '🏫 Hostel'}
+                              {conv.relatedTo.type === 'item' && '🛒 Item'}
+                            </p>
+                          )}
                         </div>
                         {conv.unread > 0 && (
                           <span className="bg-primary-600 text-white text-xs rounded-full px-2 py-1 flex-shrink-0">
@@ -190,36 +455,63 @@ const Chat = () => {
                   <div className="p-4 border-b border-gray-200 bg-white">
                     <h3 className="font-semibold">Chat</h3>
                   </div>
-                  <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
-                    {messages.map((message) => (
+                  <div 
+                    className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50"
+                    ref={(el) => {
+                      if (el) {
+                        // Store reference for scroll detection
+                        el._scrollContainer = el
+                      }
+                    }}
+                  >
+                    {messages.map((message) => {
+                      const currentUserId = (user._id || user.id)?.toString()
+                      const messageSenderId = message.senderId?.toString()
+                      const isOwnMessage = messageSenderId === currentUserId
+                      
+                      return (
                       <motion.div
                         key={message.id}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         className={`flex ${
-                          message.senderId === user.id ? 'justify-end' : 'justify-start'
-                        }`}
+                          isOwnMessage ? 'justify-end' : 'justify-start'
+                        } group`}
+                        onMouseEnter={() => setHoveredMessageId(message.id)}
+                        onMouseLeave={() => setHoveredMessageId(null)}
                       >
-                        <div
-                          className={`max-w-[85%] sm:max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                            message.senderId === user.id
-                              ? 'bg-primary-600 text-white rounded-br-none'
-                              : 'bg-white text-gray-900 rounded-bl-none shadow-sm'
-                          }`}
-                        >
-                          <p className="text-sm break-words">{message.text}</p>
-                          <p
-                            className={`text-xs mt-1 ${
-                              message.senderId === user.id
-                                ? 'text-primary-100'
-                                : 'text-gray-500'
+                        <div className="relative flex items-end space-x-2">
+                          {isOwnMessage && hoveredMessageId === message.id && (
+                            <button
+                              onClick={() => handleDeleteMessage(message.id)}
+                              className="mb-1 p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-full transition-all opacity-0 group-hover:opacity-100"
+                              title="Delete message"
+                            >
+                              <FaTrash className="text-sm" />
+                            </button>
+                          )}
+                          <div
+                            className={`max-w-[85%] sm:max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                              isOwnMessage
+                                ? 'bg-primary-600 text-white rounded-br-none'
+                                : 'bg-white text-gray-900 rounded-bl-none shadow-sm'
                             }`}
                           >
-                            {formatTime(message.timestamp)}
-                          </p>
+                            <p className="text-sm break-words">{message.text}</p>
+                            <p
+                              className={`text-xs mt-1 ${
+                                isOwnMessage
+                                  ? 'text-primary-100'
+                                  : 'text-gray-500'
+                              }`}
+                            >
+                              {formatTime(message.timestamp)}
+                            </p>
+                          </div>
                         </div>
                       </motion.div>
-                    ))}
+                      )
+                    })}
                     <div ref={messagesEndRef} />
                   </div>
                   <div className="p-3 sm:p-4 border-t border-gray-200 bg-white">

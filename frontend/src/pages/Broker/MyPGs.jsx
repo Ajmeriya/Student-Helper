@@ -13,8 +13,10 @@ const MyPGs = () => {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetchMyPGs()
-  }, [])
+    if (user) {
+      fetchMyPGs()
+    }
+  }, [user])
 
   const fetchMyPGs = async () => {
     try {
@@ -27,57 +29,65 @@ const MyPGs = () => {
         return
       }
 
+      if (!user || user.role !== 'broker') {
+        toast.error('Access denied. Only brokers can view their PGs.')
+        navigate('/login')
+        return
+      }
+
       const response = await fetch(`${API_BASE_URL}/pg/my-pgs`, {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
       })
 
+      // Check if response is ok
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Network error' }))
+        console.error('HTTP Error:', response.status, errorData)
+        throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`)
+      }
+
       const result = await response.json()
+      console.log('API Response:', result) // Debug log
 
       if (result.success) {
-        // Map backend data to frontend format
-        const mappedPGs = (result.pgs || []).map(pg => ({
-          _id: pg._id || pg.id,
-          id: pg._id || pg.id,
-          title: pg.title,
-          location: pg.location,
-          city: pg.city,
-          price: pg.price,
-          bedrooms: pg.bedrooms,
-          bathrooms: pg.bathrooms,
-          sharingType: pg.sharingType,
-          ac: pg.ac,
-          furnished: pg.furnished,
-          ownerOnFirstFloor: pg.ownerOnFirstFloor,
-          foodAvailable: pg.foodAvailable,
-          parking: pg.parking,
-          images: pg.images || [],
-          videos: pg.videos || [],
-          status: pg.status || 'available',
-          createdAt: pg.createdAt,
-          soldDate: pg.soldDate,
-          rentalPeriod: pg.rentalPeriod,
-          rentalStartDate: pg.rentalStartDate,
-          rentalEndDate: pg.rentalEndDate,
-          ...pg // Include all other fields
-        }))
+        // Use the PGs directly from backend (already in correct format)
+        const pgsList = Array.isArray(result.pgs) ? result.pgs : []
+        setPgs(pgsList)
         
-        setPgs(mappedPGs)
         if (location.state?.showSuccess) {
           toast.success('PG created successfully!')
+          // Clear state after showing message
+          navigate(location.pathname, { replace: true, state: {} })
+        }
+        
+        if (pgsList.length === 0) {
+          console.log('No PGs found for this broker')
         }
       } else {
-        console.error('API Error:', result)
-        toast.error(result.message || 'Failed to fetch PGs')
+        console.error('API returned success: false', result)
+        // Don't show error toast if it's just an empty list
+        if (result.message && !result.message.includes('No PGs')) {
+          toast.error(result.message || 'Failed to fetch PGs')
+        }
+        setPgs([])
       }
     } catch (error) {
       console.error('Error fetching PGs:', error)
       console.error('Error details:', {
         message: error.message,
-        stack: error.stack
+        stack: error.stack,
+        name: error.name
       })
-      toast.error('Failed to fetch PGs: ' + (error.message || 'Unknown error'))
+      // Only show error if it's not a network error that might be temporary
+      if (error.message && !error.message.includes('Failed to fetch')) {
+        toast.error('Error fetching PGs: ' + error.message)
+      } else {
+        toast.error('Failed to fetch PGs. Please check your connection and try again.')
+      }
+      setPgs([])
     } finally {
       setLoading(false)
     }
