@@ -3,6 +3,9 @@ import { Toaster } from 'react-hot-toast'
 import { AuthProvider } from './context/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
 
+// Public Pages
+import Home from './pages/Home'
+
 // Auth Pages
 import Login from './pages/Auth/Login'
 import Signup from './pages/Auth/Signup'
@@ -15,7 +18,7 @@ function App() {
           <main className="flex-grow">
             <Routes>
               {/* Public Routes */}
-              <Route path="/" element={<Navigate to="/login" replace />} />
+              <Route path="/" element={<Home />} />
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
               
@@ -66,8 +69,8 @@ function App() {
                 }
               />
 
-              {/* Catch all - redirect to login */}
-              <Route path="*" element={<Navigate to="/login" replace />} />
+              {/* Catch all - redirect to home */}
+              <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </main>
           
