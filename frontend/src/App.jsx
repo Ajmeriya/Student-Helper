@@ -10,6 +10,10 @@ import Home from './pages/Home'
 import Login from './pages/Auth/Login'
 import Signup from './pages/Auth/Signup'
 
+// Student Pages
+import PGList from './pages/Student/PGList'
+import PGDetails from './pages/Student/PGDetails'
+
 function App() {
   return (
     <AuthProvider>
@@ -21,6 +25,24 @@ function App() {
               <Route path="/" element={<Home />} />
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
+              
+              {/* Student PG Routes */}
+              <Route
+                path="/student/pg"
+                element={
+                  <ProtectedRoute allowedRoles={['student']}>
+                    <PGList />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/student/pg/:id"
+                element={
+                  <ProtectedRoute allowedRoles={['student']}>
+                    <PGDetails />
+                  </ProtectedRoute>
+                }
+              />
               
               {/* Protected Routes - Placeholders for future development */}
               <Route
