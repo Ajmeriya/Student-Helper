@@ -52,7 +52,7 @@ export const GENDER_OPTIONS = [
 ]
 
 // API Configuration (Update with your backend URL)
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api'
 
 // Map Default Center (Nadiad, Gujarat)
 export const DEFAULT_MAP_CENTER = [22.6944, 72.8606]
