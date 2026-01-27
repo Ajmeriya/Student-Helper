@@ -13,6 +13,10 @@ import Signup from './pages/Auth/Signup'
 // Student Pages
 import PGList from './pages/Student/PGList'
 import PGDetails from './pages/Student/PGDetails'
+import Marketplace from './pages/Student/Marketplace'
+import AddItem from './pages/Student/AddItem'
+import MyItems from './pages/Student/MyItems'
+import EditItem from './pages/Student/EditItem'
 
 function App() {
   return (
@@ -40,6 +44,40 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={['student']}>
                     <PGDetails />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Student Marketplace Routes */}
+              <Route
+                path="/student/marketplace"
+                element={
+                  <ProtectedRoute allowedRoles={['student']}>
+                    <Marketplace />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/student/add-item"
+                element={
+                  <ProtectedRoute allowedRoles={['student']}>
+                    <AddItem />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/student/my-items"
+                element={
+                  <ProtectedRoute allowedRoles={['student']}>
+                    <MyItems />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/student/edit-item/:id"
+                element={
+                  <ProtectedRoute allowedRoles={['student']}>
+                    <EditItem />
                   </ProtectedRoute>
                 }
               />
