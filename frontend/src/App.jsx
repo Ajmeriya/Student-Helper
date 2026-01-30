@@ -18,11 +18,20 @@ import AddItem from './pages/Student/AddItem'
 import MyItems from './pages/Student/MyItems'
 import EditItem from './pages/Student/EditItem'
 
+// Chat & Profile Pages
+import Chat from './pages/Chat/Chat'
+import EditProfile from './pages/Profile/EditProfile'
+
+// Layout Components
+import Navbar from './components/Layout/Navbar'
+import Footer from './components/Layout/Footer'
+
 function App() {
   return (
     <AuthProvider>
       <Router>
         <div className="min-h-screen flex flex-col bg-gray-50">
+          <Navbar />
           <main className="flex-grow">
             <Routes>
               {/* Public Routes */}
@@ -81,6 +90,26 @@ function App() {
                   </ProtectedRoute>
                 }
               />
+
+              {/* Chat Routes */}
+              <Route
+                path="/chat"
+                element={
+                  <ProtectedRoute>
+                    <Chat />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Profile Routes */}
+              <Route
+                path="/profile/edit"
+                element={
+                  <ProtectedRoute>
+                    <EditProfile />
+                  </ProtectedRoute>
+                }
+              />
               
               {/* Protected Routes - Placeholders for future development */}
               <Route
@@ -133,6 +162,7 @@ function App() {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </main>
+          <Footer />
           
           {/* Toast Notifications */}
           <Toaster 
