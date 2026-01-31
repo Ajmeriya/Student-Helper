@@ -11,12 +11,24 @@ import Login from './pages/Auth/Login'
 import Signup from './pages/Auth/Signup'
 
 // Student Pages
+import StudentDashboard from './pages/Student/StudentDashboard'
 import PGList from './pages/Student/PGList'
 import PGDetails from './pages/Student/PGDetails'
+import HostelList from './pages/Student/HostelList'
+import HostelDetails from './pages/Student/HostelDetails'
 import Marketplace from './pages/Student/Marketplace'
 import AddItem from './pages/Student/AddItem'
 import MyItems from './pages/Student/MyItems'
 import EditItem from './pages/Student/EditItem'
+
+// Broker Pages
+import BrokerDashboard from './pages/Broker/BrokerDashboard'
+import MyPGs from './pages/Broker/MyPGs'
+import AddPG from './pages/Broker/AddPG'
+import EditPG from './pages/Broker/EditPG'
+
+// Hostel Admin Pages
+import HostelAdminDashboard from './pages/HostelAdmin/HostelAdminDashboard'
 
 // Chat & Profile Pages
 import Chat from './pages/Chat/Chat'
@@ -39,6 +51,16 @@ function App() {
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
               
+              {/* Student Dashboard */}
+              <Route
+                path="/student/dashboard"
+                element={
+                  <ProtectedRoute allowedRoles={['student']}>
+                    <StudentDashboard />
+                  </ProtectedRoute>
+                }
+              />
+
               {/* Student PG Routes */}
               <Route
                 path="/student/pg"
@@ -53,6 +75,24 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={['student']}>
                     <PGDetails />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Student Hostel Routes */}
+              <Route
+                path="/student/hostel"
+                element={
+                  <ProtectedRoute allowedRoles={['student']}>
+                    <HostelList />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/student/hostel/:id"
+                element={
+                  <ProtectedRoute allowedRoles={['student']}>
+                    <HostelDetails />
                   </ProtectedRoute>
                 }
               />
@@ -111,53 +151,50 @@ function App() {
                 }
               />
               
-              {/* Protected Routes - Placeholders for future development */}
-              <Route
-                path="/student/dashboard"
-                element={
-                  <ProtectedRoute allowedRoles={['student']}>
-                    <div className="min-h-screen flex items-center justify-center">
-                      <div className="text-center">
-                        <h1 className="text-4xl font-bold text-gray-800 mb-4">
-                          Student Dashboard
-                        </h1>
-                        <p className="text-gray-600">Coming soon...</p>
-                      </div>
-                    </div>
-                  </ProtectedRoute>
-                }
-              />
+              {/* Broker Routes */}
               <Route
                 path="/broker/dashboard"
                 element={
                   <ProtectedRoute allowedRoles={['broker']}>
-                    <div className="min-h-screen flex items-center justify-center">
-                      <div className="text-center">
-                        <h1 className="text-4xl font-bold text-gray-800 mb-4">
-                          Broker Dashboard
-                        </h1>
-                        <p className="text-gray-600">Coming soon...</p>
-                      </div>
-                    </div>
+                    <BrokerDashboard />
                   </ProtectedRoute>
                 }
               />
               <Route
-                path="/hostel-admin/dashboard"
+                path="/broker/my-pgs"
                 element={
-                  <ProtectedRoute allowedRoles={['hostelAdmin']}>
-                    <div className="min-h-screen flex items-center justify-center">
-                      <div className="text-center">
-                        <h1 className="text-4xl font-bold text-gray-800 mb-4">
-                          Hostel Admin Dashboard
-                        </h1>
-                        <p className="text-gray-600">Coming soon...</p>
-                      </div>
-                    </div>
+                  <ProtectedRoute allowedRoles={['broker']}>
+                    <MyPGs />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/broker/add-pg"
+                element={
+                  <ProtectedRoute allowedRoles={['broker']}>
+                    <AddPG />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/broker/edit-pg/:id"
+                element={
+                  <ProtectedRoute allowedRoles={['broker']}>
+                    <EditPG />
                   </ProtectedRoute>
                 }
               />
 
+              {/* Hostel Admin Routes */}
+              <Route
+                path="/hostel-admin/dashboard"
+                element={
+                  <ProtectedRoute allowedRoles={['hostelAdmin']}>
+                    <HostelAdminDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              
               {/* Catch all - redirect to home */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
