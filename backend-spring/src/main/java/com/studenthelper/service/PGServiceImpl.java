@@ -1,7 +1,11 @@
 package com.studenthelper.service;
 
+import com.studenthelper.dto.PGFilterRequest;
+import com.studenthelper.dto.PGRequest;
+import com.studenthelper.dto.PGResponse;
 import com.studenthelper.entity.PG;
 import com.studenthelper.entity.User;
+import com.studenthelper.mapper.PGMapper;
 import com.studenthelper.repository.PGRepository;
 import com.studenthelper.repository.UserRepository;
 import org.slf4j.Logger;
@@ -14,6 +18,7 @@ import jakarta.persistence.criteria.Predicate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class PGServiceImpl implements PGService {
@@ -26,8 +31,13 @@ public class PGServiceImpl implements PGService {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private PGMapper pgMapper;
+
     @Override
-    public List<PG> getAllPGs(Map<String, String> filters) {
+    public List<PGResponse> getAllPGs(PGFilterRequest filters) {
+        final PGFilterRequest finalFilters = filters != null ? filters : new PGFilterRequest();
+        
         Specification<PG> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             
@@ -35,20 +45,20 @@ public class PGServiceImpl implements PGService {
             // Fix: Use correct syntax for IN clause
             predicates.add(root.get("status").in(PG.PGStatus.available, PG.PGStatus.onRent));
 
-            if (filters.containsKey("city")) {
-                predicates.add(cb.equal(root.get("city"), filters.get("city")));
+            if (finalFilters.getCity() != null && !finalFilters.getCity().isEmpty()) {
+                predicates.add(cb.equal(root.get("city"), finalFilters.getCity()));
             }
 
-            if (filters.containsKey("minPrice")) {
-                predicates.add(cb.greaterThanOrEqualTo(root.get("price"), Double.parseDouble(filters.get("minPrice"))));
+            if (finalFilters.getMinPrice() != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("price"), finalFilters.getMinPrice()));
             }
 
-            if (filters.containsKey("maxPrice")) {
-                predicates.add(cb.lessThanOrEqualTo(root.get("price"), Double.parseDouble(filters.get("maxPrice"))));
+            if (finalFilters.getMaxPrice() != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("price"), finalFilters.getMaxPrice()));
             }
 
-            if (filters.containsKey("sharingType")) {
-                String sharingType = filters.get("sharingType");
+            if (finalFilters.getSharingType() != null && !finalFilters.getSharingType().isEmpty()) {
+                String sharingType = finalFilters.getSharingType();
                 try {
                     if ("double".equalsIgnoreCase(sharingType)) {
                         predicates.add(cb.equal(root.get("sharingType"), PG.SharingType.DOUBLE));
@@ -72,28 +82,28 @@ public class PGServiceImpl implements PGService {
                 }
             }
 
-            if ("true".equals(filters.get("ac"))) {
+            if (finalFilters.getAc() != null && finalFilters.getAc()) {
                 predicates.add(cb.equal(root.get("ac"), true));
             }
 
-            if ("true".equals(filters.get("furnished"))) {
+            if (finalFilters.getFurnished() != null && finalFilters.getFurnished()) {
                 predicates.add(cb.equal(root.get("furnished"), true));
             }
 
-            if ("true".equals(filters.get("ownerOnFirstFloor"))) {
+            if (finalFilters.getOwnerOnFirstFloor() != null && finalFilters.getOwnerOnFirstFloor()) {
                 predicates.add(cb.equal(root.get("ownerOnFirstFloor"), true));
             }
 
-            if ("true".equals(filters.get("foodAvailable"))) {
+            if (finalFilters.getFoodAvailable() != null && finalFilters.getFoodAvailable()) {
                 predicates.add(cb.equal(root.get("foodAvailable"), true));
             }
 
-            if ("true".equals(filters.get("parking"))) {
+            if (finalFilters.getParking() != null && finalFilters.getParking()) {
                 predicates.add(cb.equal(root.get("parking"), true));
             }
 
-            if (filters.containsKey("search")) {
-                String search = filters.get("search");
+            if (finalFilters.getSearch() != null && !finalFilters.getSearch().isEmpty()) {
+                String search = finalFilters.getSearch();
                 Predicate titlePred = cb.like(cb.lower(root.get("title")), "%" + search.toLowerCase() + "%");
                 Predicate locationPred = cb.like(cb.lower(root.get("location")), "%" + search.toLowerCase() + "%");
                 predicates.add(cb.or(titlePred, locationPred));
@@ -102,43 +112,52 @@ public class PGServiceImpl implements PGService {
             return cb.and(predicates.toArray(new Predicate[0]));
         };
 
-        return pgRepository.findAll(spec);
+        List<PG> pgs = pgRepository.findAll(spec);
+        return pgs.stream()
+                .map(pgMapper::toResponse)
+                .collect(Collectors.toList());
     }
 
     @Override
-    public PG getPGById(Long id) {
-        return pgRepository.findById(id).orElse(null);
+    public PGResponse getPGById(Long id) {
+        PG pg = pgRepository.findById(id)
+                .orElseThrow(() -> new com.studenthelper.exception.ResourceNotFoundException("PG", "id", id));
+        return pgMapper.toResponse(pg);
     }
 
     @Override
-    public PG createPG(PG pg, Long brokerId) {
-        User broker = userRepository.findById(brokerId).orElseThrow();
+    public PGResponse createPG(PGRequest request, Long brokerId) {
+        User broker = userRepository.findById(brokerId)
+                .orElseThrow(() -> new RuntimeException("Broker not found"));
+        
+        PG pg = pgMapper.toEntity(request);
         pg.setBroker(broker);
         pg.setStatus(PG.PGStatus.available);
         pg.setIsActive(true);
-        return pgRepository.save(pg);
+        
+        PG savedPG = pgRepository.save(pg);
+        return pgMapper.toResponse(savedPG);
     }
 
     @Override
-    public PG updatePG(Long id, PG updatedPG, Long brokerId) {
-        PG pg = pgRepository.findById(id).orElseThrow();
+    public PGResponse updatePG(Long id, PGRequest request, Long brokerId) {
+        PG pg = pgRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("PG not found"));
+        
         if (!pg.getBroker().getId().equals(brokerId)) {
             throw new RuntimeException("Not authorized to update this PG");
         }
         
-        // Update fields
-        if (updatedPG.getTitle() != null) pg.setTitle(updatedPG.getTitle());
-        if (updatedPG.getLocation() != null) pg.setLocation(updatedPG.getLocation());
-        if (updatedPG.getCity() != null) pg.setCity(updatedPG.getCity());
-        if (updatedPG.getPrice() != null) pg.setPrice(updatedPG.getPrice());
-        // Add more field updates as needed
-        
-        return pgRepository.save(pg);
+        pgMapper.updateEntityFromRequest(pg, request);
+        PG savedPG = pgRepository.save(pg);
+        return pgMapper.toResponse(savedPG);
     }
 
     @Override
     public void deletePG(Long id, Long brokerId) {
-        PG pg = pgRepository.findById(id).orElseThrow();
+        PG pg = pgRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("PG not found"));
+        
         if (!pg.getBroker().getId().equals(brokerId)) {
             throw new RuntimeException("Not authorized to delete this PG");
         }
@@ -146,13 +165,18 @@ public class PGServiceImpl implements PGService {
     }
 
     @Override
-    public List<PG> getMyPGs(Long brokerId) {
-        return pgRepository.findByBroker_Id(brokerId);
+    public List<PGResponse> getMyPGs(Long brokerId) {
+        List<PG> pgs = pgRepository.findByBroker_Id(brokerId);
+        return pgs.stream()
+                .map(pgMapper::toResponse)
+                .collect(Collectors.toList());
     }
 
     @Override
-    public PG updatePGStatus(Long id, String status, Long brokerId, Map<String, Object> statusData) {
-        PG pg = pgRepository.findById(id).orElseThrow();
+    public PGResponse updatePGStatus(Long id, String status, Long brokerId, Map<String, Object> statusData) {
+        PG pg = pgRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("PG not found"));
+        
         if (!pg.getBroker().getId().equals(brokerId)) {
             throw new RuntimeException("Not authorized to update this PG");
         }
@@ -180,7 +204,8 @@ public class PGServiceImpl implements PGService {
             pg.setRentalPeriod(null);
         }
 
-        return pgRepository.save(pg);
+        PG savedPG = pgRepository.save(pg);
+        return pgMapper.toResponse(savedPG);
     }
 }
 

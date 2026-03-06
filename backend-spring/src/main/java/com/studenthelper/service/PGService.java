@@ -1,16 +1,17 @@
 package com.studenthelper.service;
 
-import com.studenthelper.entity.PG;
+import com.studenthelper.dto.PGFilterRequest;
+import com.studenthelper.dto.PGRequest;
+import com.studenthelper.dto.PGResponse;
 import java.util.List;
 import java.util.Map;
 
 public interface PGService {
-    List<PG> getAllPGs(Map<String, String> filters);
-    PG getPGById(Long id);
-    PG createPG(PG pg, Long brokerId);
-    PG updatePG(Long id, PG updatedPG, Long brokerId);
+    List<PGResponse> getAllPGs(PGFilterRequest filters);
+    PGResponse getPGById(Long id);
+    PGResponse createPG(PGRequest request, Long brokerId);
+    PGResponse updatePG(Long id, PGRequest request, Long brokerId);
     void deletePG(Long id, Long brokerId);
-    List<PG> getMyPGs(Long brokerId);
-    PG updatePGStatus(Long id, String status, Long brokerId, Map<String, Object> statusData);
+    List<PGResponse> getMyPGs(Long brokerId);
+    PGResponse updatePGStatus(Long id, String status, Long brokerId, Map<String, Object> statusData);
 }
-

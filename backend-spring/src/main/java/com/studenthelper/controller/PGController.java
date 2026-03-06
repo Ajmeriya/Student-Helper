@@ -1,20 +1,28 @@
 package com.studenthelper.controller;
 
-import com.studenthelper.entity.PG;
+import com.studenthelper.dto.ApiResponse;
+import com.studenthelper.dto.PGFilterRequest;
+import com.studenthelper.dto.PGRequest;
+import com.studenthelper.dto.PGResponse;
 import com.studenthelper.entity.User;
 import com.studenthelper.service.CloudinaryService;
 import com.studenthelper.service.PGService;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.WebDataBinder;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -31,436 +39,154 @@ public class PGController {
     @Autowired
     private CloudinaryService cloudinaryService;
 
+    @InitBinder
+    public void initBinder(WebDataBinder binder) {
+        // Register custom property editor for Boolean to handle form-data string values
+        binder.registerCustomEditor(Boolean.class, new org.springframework.beans.propertyeditors.CustomBooleanEditor(true));
+    }
+
     @GetMapping
-    public ResponseEntity<Map<String, Object>> getAllPGs(@RequestParam Map<String, String> filters) {
-        try {
-            List<PG> pgs = pgService.getAllPGs(filters);
-            
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("count", pgs.size());
-            response.put("pgs", pgs);
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            logger.error("Error fetching PGs", e);
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "Error fetching PGs");
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
-        }
+    public ResponseEntity<ApiResponse<List<PGResponse>>> getAllPGs(PGFilterRequest filters) {
+        List<PGResponse> pgs = pgService.getAllPGs(filters);
+        return ResponseEntity.ok(ApiResponse.success(pgs, pgs.size()));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> getPGById(@PathVariable Long id) {
-        try {
-            PG pg = pgService.getPGById(id);
-            if (pg == null) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("success", false);
-                response.put("message", "PG not found");
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
-            }
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("pg", pg);
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            logger.error("Error fetching PG by ID: " + id, e);
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "Error fetching PG");
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
-        }
+    public ResponseEntity<ApiResponse<PGResponse>> getPGById(@PathVariable Long id) {
+        PGResponse pg = pgService.getPGById(id);
+        return ResponseEntity.ok(ApiResponse.success(pg));
     }
 
     @PostMapping
-    public ResponseEntity<Map<String, Object>> createPG(
+    @PreAuthorize("hasRole('BROKER')")
+    public ResponseEntity<ApiResponse<PGResponse>> createPG(
+            @Valid @ModelAttribute PGRequest pgRequest,
             @RequestParam(required = false) MultipartFile[] images,
             @RequestParam(required = false) MultipartFile[] videos,
-            @RequestParam(required = false) Double latitude,
-            @RequestParam(required = false) Double longitude,
-            @RequestParam String title,
-            @RequestParam String location,
-            @RequestParam String city,
-            @RequestParam String collegeName,
-            @RequestParam String sharingType,
-            @RequestParam Integer bedrooms,
-            @RequestParam Integer bathrooms,
-            @RequestParam(required = false) Integer floorNumber,
-            @RequestParam Double price,
-            @RequestParam(required = false) Double securityDeposit,
-            @RequestParam(required = false) Double maintenance,
-            @RequestParam(required = false) String ac,
-            @RequestParam(required = false) String furnished,
-            @RequestParam(required = false) String ownerOnFirstFloor,
-            @RequestParam(required = false) String foodAvailable,
-            @RequestParam(required = false) String powerBackup,
-            @RequestParam(required = false) String parking,
-            @RequestParam(required = false) String waterSupply,
-            @RequestParam(required = false) String preferredTenant,
-            @RequestParam(required = false) String availabilityDate,
-            @RequestParam(required = false) String nearbyLandmarks,
-            @RequestParam(required = false) String instructions,
+            @AuthenticationPrincipal User user,
             HttpServletRequest request) {
-        try {
-            // Try to get user from SecurityContext first, then request attributes
-            User user = null;
-            Long userId = null;
-            
-            org.springframework.security.core.Authentication authentication = 
-                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-            
-            if (authentication != null && authentication.getPrincipal() instanceof User) {
-                user = (User) authentication.getPrincipal();
-                userId = user.getId();
-            } else {
-                // Fallback to request attributes
-                userId = (Long) request.getAttribute("userId");
-                user = (User) request.getAttribute("user");
-            }
+        
+        // Handle availabilityDate parsing if provided as string (form-data sends as string)
+        parseAvailabilityDate(pgRequest, request);
 
-            if (userId == null || user == null) {
-                logger.error("Authentication failed for PG creation");
-                Map<String, Object> response = new HashMap<>();
-                response.put("success", false);
-                response.put("message", "Authentication required");
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        // Upload images and videos
+        List<String> imageUrls = new ArrayList<>();
+        if (images != null && images.length > 0) {
+            try {
+                imageUrls = cloudinaryService.uploadImages(
+                    Arrays.asList(images), "student-helper/pgs");
+            } catch (java.io.IOException e) {
+                throw new RuntimeException("Failed to upload images: " + e.getMessage(), e);
             }
-
-            if (user.getRole() != User.Role.broker) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("success", false);
-                response.put("message", "Access denied. Broker role required.");
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
-            }
-
-            // Create PG object manually
-            PG pg = new PG();
-            pg.setTitle(title);
-            pg.setLocation(location);
-            pg.setCity(city);
-            pg.setCollegeName(collegeName);
-            
-            // Handle sharingType enum - convert "double" to "DOUBLE", others are lowercase
-            if ("double".equalsIgnoreCase(sharingType)) {
-                pg.setSharingType(PG.SharingType.DOUBLE);
-            } else {
-                try {
-                    // Enum constants are: single, DOUBLE, triple, quad (mostly lowercase)
-                    String normalized = sharingType.toLowerCase();
-                    if ("single".equals(normalized)) {
-                        pg.setSharingType(PG.SharingType.single);
-                    } else if ("triple".equals(normalized)) {
-                        pg.setSharingType(PG.SharingType.triple);
-                    } else if ("quad".equals(normalized)) {
-                        pg.setSharingType(PG.SharingType.quad);
-                    } else {
-                        // Try valueOf as fallback
-                        pg.setSharingType(PG.SharingType.valueOf(sharingType));
-                    }
-                } catch (IllegalArgumentException e) {
-                    logger.warn("Invalid sharingType: {}, defaulting to single", sharingType);
-                    pg.setSharingType(PG.SharingType.single);
-                }
-            }
-            
-            pg.setBedrooms(bedrooms);
-            pg.setBathrooms(bathrooms);
-            pg.setFloorNumber(floorNumber != null ? floorNumber : 0);
-            pg.setPrice(price);
-            pg.setSecurityDeposit(securityDeposit != null ? securityDeposit : 0.0);
-            pg.setMaintenance(maintenance != null ? maintenance : 0.0);
-            
-            // Boolean fields - parse from string (FormData sends everything as strings)
-            pg.setAc(parseBoolean(ac));
-            pg.setFurnished(parseBoolean(furnished));
-            pg.setOwnerOnFirstFloor(parseBoolean(ownerOnFirstFloor));
-            pg.setFoodAvailable(parseBoolean(foodAvailable));
-            pg.setPowerBackup(parseBoolean(powerBackup));
-            pg.setParking(parseBoolean(parking));
-            
-            // Handle waterSupply enum
-            if (waterSupply != null && !waterSupply.isEmpty()) {
-                if ("24x7".equals(waterSupply)) {
-                    pg.setWaterSupply(PG.WaterSupply.FULL_24X7);
-                } else if ("timing".equals(waterSupply)) {
-                    pg.setWaterSupply(PG.WaterSupply.TIMING);
-                } else if ("limited".equals(waterSupply)) {
-                    pg.setWaterSupply(PG.WaterSupply.LIMITED);
-                } else {
-                    pg.setWaterSupply(PG.WaterSupply.EMPTY);
-                }
-            }
-            
-            // Handle preferredTenant enum
-            if (preferredTenant != null && !preferredTenant.isEmpty()) {
-                try {
-                    pg.setPreferredTenant(PG.PreferredTenant.valueOf(preferredTenant.toLowerCase()));
-                } catch (IllegalArgumentException e) {
-                    pg.setPreferredTenant(PG.PreferredTenant.EMPTY);
-                }
-            } else {
-                pg.setPreferredTenant(PG.PreferredTenant.EMPTY);
-            }
-            
-            // Handle availabilityDate
-            if (availabilityDate != null && !availabilityDate.isEmpty()) {
-                try {
-                    pg.setAvailabilityDate(java.time.LocalDateTime.parse(availabilityDate));
-                } catch (Exception e) {
-                    // Try parsing as date string
-                    try {
-                        java.time.LocalDate date = java.time.LocalDate.parse(availabilityDate);
-                        pg.setAvailabilityDate(date.atStartOfDay());
-                    } catch (Exception e2) {
-                        // If parsing fails, set to null
-                        pg.setAvailabilityDate(null);
-                    }
-                }
-            }
-            
-            pg.setNearbyLandmarks(nearbyLandmarks);
-            pg.setInstructions(instructions);
-            
-            // Set coordinates
-            if (latitude != null && longitude != null) {
-                PG.Coordinates coords = new PG.Coordinates();
-                coords.setLat(latitude);
-                coords.setLng(longitude);
-                pg.setCoordinates(coords);
-            }
-
-            // Initialize images and videos lists (required for @ElementCollection)
-            if (pg.getImages() == null) {
-                pg.setImages(new ArrayList<>());
-            }
-            if (pg.getVideos() == null) {
-                pg.setVideos(new ArrayList<>());
-            }
-
-            // Upload images
-            if (images != null && images.length > 0) {
-                List<String> imageUrls = cloudinaryService.uploadImages(
-                    java.util.Arrays.asList(images), "student-helper/pgs");
-                pg.setImages(imageUrls);
-            }
-
-            // Upload videos
-            if (videos != null && videos.length > 0) {
-                List<String> videoUrls = cloudinaryService.uploadVideos(
-                    java.util.Arrays.asList(videos), "student-helper/pgs/videos");
-                pg.setVideos(videoUrls);
-            }
-
-            // Ensure status and isActive are set (they have defaults but let's be explicit)
-            if (pg.getStatus() == null) {
-                pg.setStatus(PG.PGStatus.available);
-            }
-            if (pg.getIsActive() == null) {
-                pg.setIsActive(true);
-            }
-
-            PG createdPG = pgService.createPG(pg, userId);
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", "PG created successfully");
-            response.put("pg", createdPG);
-            return ResponseEntity.status(HttpStatus.CREATED).body(response);
-        } catch (Exception e) {
-            logger.error("Error creating PG", e);
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "Error creating PG");
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
+
+        List<String> videoUrls = new ArrayList<>();
+        if (videos != null && videos.length > 0) {
+            try {
+                videoUrls = cloudinaryService.uploadVideos(
+                    Arrays.asList(videos), "student-helper/pgs/videos");
+            } catch (java.io.IOException e) {
+                throw new RuntimeException("Failed to upload videos: " + e.getMessage(), e);
+            }
+        }
+
+        // Set uploaded file URLs
+        pgRequest.setImages(imageUrls);
+        pgRequest.setVideos(videoUrls);
+
+        PGResponse createdPG = pgService.createPG(pgRequest, user.getId());
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(createdPG, "PG created successfully"));
     }
 
-    @PutMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> updatePG(
+    @PatchMapping("/{id}")
+    @PreAuthorize("hasRole('BROKER')")
+    public ResponseEntity<ApiResponse<PGResponse>> updatePG(
             @PathVariable Long id,
             @RequestParam(required = false) MultipartFile[] images,
             @RequestParam(required = false) MultipartFile[] videos,
-            @ModelAttribute PG updatedPG,
-            HttpServletRequest request) {
-        try {
-            Long userId = (Long) request.getAttribute("userId");
-            User user = (User) request.getAttribute("user");
-
-            if (userId == null || user == null || user.getRole() != User.Role.broker) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("success", false);
-                response.put("message", "Access denied");
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
-            }
-
-            PG existingPG = pgService.getPGById(id);
-            if (existingPG == null) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("success", false);
-                response.put("message", "PG not found");
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
-            }
-
-            // Update fields
-            if (updatedPG.getTitle() != null) existingPG.setTitle(updatedPG.getTitle());
-            if (updatedPG.getLocation() != null) existingPG.setLocation(updatedPG.getLocation());
-            if (updatedPG.getPrice() != null) existingPG.setPrice(updatedPG.getPrice());
-            // Add more updates as needed
-
-            if (images != null && images.length > 0) {
+            @ModelAttribute PGRequest pgRequest,
+            @AuthenticationPrincipal User user) {
+        
+        // Upload new images and videos if provided
+        if (images != null && images.length > 0) {
+            try {
                 List<String> newImageUrls = cloudinaryService.uploadImages(
                     java.util.Arrays.asList(images), "student-helper/pgs");
-                if (existingPG.getImages() != null) {
-                    existingPG.getImages().addAll(newImageUrls);
+                if (pgRequest.getImages() != null) {
+                    pgRequest.getImages().addAll(newImageUrls);
                 } else {
-                    existingPG.setImages(newImageUrls);
+                    pgRequest.setImages(newImageUrls);
                 }
+            } catch (java.io.IOException e) {
+                throw new RuntimeException("Failed to upload images: " + e.getMessage(), e);
             }
+        }
 
-            if (videos != null && videos.length > 0) {
+        if (videos != null && videos.length > 0) {
+            try {
                 List<String> newVideoUrls = cloudinaryService.uploadVideos(
                     java.util.Arrays.asList(videos), "student-helper/pgs/videos");
-                if (existingPG.getVideos() != null) {
-                    existingPG.getVideos().addAll(newVideoUrls);
+                if (pgRequest.getVideos() != null) {
+                    pgRequest.getVideos().addAll(newVideoUrls);
                 } else {
-                    existingPG.setVideos(newVideoUrls);
+                    pgRequest.setVideos(newVideoUrls);
                 }
+            } catch (java.io.IOException e) {
+                throw new RuntimeException("Failed to upload videos: " + e.getMessage(), e);
             }
-
-            PG savedPG = pgService.updatePG(id, existingPG, userId);
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", "PG updated successfully");
-            response.put("pg", savedPG);
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "Error updating PG");
-            response.put("error", e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
+
+        PGResponse savedPG = pgService.updatePG(id, pgRequest, user.getId());
+        return ResponseEntity.ok(ApiResponse.success(savedPG, "PG updated successfully"));
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> deletePG(@PathVariable Long id, HttpServletRequest request) {
-        try {
-            Long userId = (Long) request.getAttribute("userId");
-            User user = (User) request.getAttribute("user");
-
-            if (userId == null || user == null || user.getRole() != User.Role.broker) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("success", false);
-                response.put("message", "Access denied");
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
-            }
-
-            pgService.deletePG(id, userId);
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", "PG deleted successfully");
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "Error deleting PG");
-            response.put("error", e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
-        }
+    @PreAuthorize("hasRole('BROKER')")
+    public ResponseEntity<ApiResponse<Void>> deletePG(
+            @PathVariable Long id,
+            @AuthenticationPrincipal User user) {
+        pgService.deletePG(id, user.getId());
+        return ResponseEntity.ok(ApiResponse.success(null, "PG deleted successfully"));
     }
 
     @GetMapping("/my-pgs")
-    public ResponseEntity<Map<String, Object>> getMyPGs(HttpServletRequest request) {
-        try {
-            // Get user from SecurityContext (same as createPG method)
-            org.springframework.security.core.Authentication authentication = 
-                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-            
-            User user = null;
-            Long userId = null;
-            
-            if (authentication != null && authentication.getPrincipal() instanceof User) {
-                user = (User) authentication.getPrincipal();
-                userId = user.getId();
-            } else {
-                // Fallback to request attributes
-                userId = (Long) request.getAttribute("userId");
-                user = (User) request.getAttribute("user");
-            }
-
-            if (userId == null || user == null || user.getRole() != User.Role.broker) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("success", false);
-                response.put("message", "Access denied. Broker role required.");
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
-            }
-
-            List<PG> pgs = pgService.getMyPGs(userId);
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("count", pgs.size());
-            response.put("pgs", pgs);
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            logger.error("Error fetching my PGs", e);
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "Error fetching PGs");
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
-        }
+    @PreAuthorize("hasRole('BROKER')")
+    public ResponseEntity<ApiResponse<List<PGResponse>>> getMyPGs(@AuthenticationPrincipal User user) {
+        List<PGResponse> pgs = pgService.getMyPGs(user.getId());
+        return ResponseEntity.ok(ApiResponse.success(pgs, pgs.size()));
     }
 
     @PatchMapping("/{id}/status")
-    public ResponseEntity<Map<String, Object>> updatePGStatus(
+    @PreAuthorize("hasRole('BROKER')")
+    public ResponseEntity<ApiResponse<PGResponse>> updatePGStatus(
             @PathVariable Long id,
             @RequestBody Map<String, Object> statusData,
-            HttpServletRequest request) {
-        try {
-            Long userId = (Long) request.getAttribute("userId");
-            User user = (User) request.getAttribute("user");
-
-            if (userId == null || user == null || user.getRole() != User.Role.broker) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("success", false);
-                response.put("message", "Access denied");
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
-            }
-
-            String status = (String) statusData.get("status");
-            if (status == null || !java.util.Arrays.asList("available", "sold", "onRent").contains(status)) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("success", false);
-                response.put("message", "Invalid status");
-                return ResponseEntity.badRequest().body(response);
-            }
-
-            PG updatedPG = pgService.updatePGStatus(id, status, userId, statusData);
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", "PG status updated successfully");
-            response.put("pg", updatedPG);
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "Error updating PG status");
-            response.put("error", e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+            @AuthenticationPrincipal User user) {
+        String status = (String) statusData.get("status");
+        if (status == null || !java.util.Arrays.asList("available", "sold", "onRent").contains(status)) {
+            throw new IllegalArgumentException("Invalid status. Must be one of: available, sold, onRent");
         }
+
+        PGResponse updatedPG = pgService.updatePGStatus(id, status, user.getId(), statusData);
+        return ResponseEntity.ok(ApiResponse.success(updatedPG, "PG status updated successfully"));
     }
     
-    // Helper method to parse boolean from string (FormData sends everything as strings)
-    private boolean parseBoolean(String value) {
-        if (value == null || value.isEmpty()) {
-            return false;
+    // Helper method to parse availabilityDate from form-data (form-data sends as string)
+    private void parseAvailabilityDate(PGRequest pgRequest, HttpServletRequest request) {
+        String availabilityDateParam = request.getParameter("availabilityDate");
+        if (availabilityDateParam != null && !availabilityDateParam.isEmpty() && pgRequest.getAvailabilityDate() == null) {
+            try {
+                pgRequest.setAvailabilityDate(LocalDateTime.parse(availabilityDateParam));
+            } catch (Exception e) {
+                try {
+                    pgRequest.setAvailabilityDate(java.time.LocalDate.parse(availabilityDateParam).atStartOfDay());
+                } catch (Exception e2) {
+                    // Leave as null if parsing fails
+                    logger.debug("Could not parse availabilityDate: {}", availabilityDateParam);
+                }
+            }
         }
-        return "true".equalsIgnoreCase(value) || "1".equals(value) || Boolean.parseBoolean(value);
     }
 }
 

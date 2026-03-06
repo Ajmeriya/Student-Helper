@@ -10,4 +10,3 @@ public interface CloudinaryService {
     List<String> uploadImages(List<MultipartFile> files, String folder) throws IOException;
     List<String> uploadVideos(List<MultipartFile> files, String folder) throws IOException;
 }
-
