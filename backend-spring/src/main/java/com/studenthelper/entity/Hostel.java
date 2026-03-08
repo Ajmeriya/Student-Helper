@@ -6,7 +6,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
-import java.util.Map;
+import java.util.List;
 
 @Entity
 @Table(name = "hostels")
@@ -64,18 +64,12 @@ public class Hostel {
     @ElementCollection
     @CollectionTable(name = "hostel_images", joinColumns = @JoinColumn(name = "hostel_id"))
     @Column(name = "image_url")
-    private java.util.List<String> images;
+    private List<String> images;
 
     @ElementCollection
     @CollectionTable(name = "hostel_videos", joinColumns = @JoinColumn(name = "hostel_id"))
     @Column(name = "video_url")
-    private java.util.List<String> videos;
-
-    @ElementCollection
-    @CollectionTable(name = "hostel_room_type_images", joinColumns = @JoinColumn(name = "hostel_id"))
-    @MapKeyColumn(name = "room_type")
-    @Column(name = "image_urls", columnDefinition = "TEXT")
-    private Map<String, String> roomTypeImages;
+    private List<String> videos;
 
     @ManyToOne(fetch = FetchType.EAGER) // Eagerly fetch admin to avoid lazy loading issues in JSON serialization
     @JoinColumn(name = "admin_id", nullable = false)

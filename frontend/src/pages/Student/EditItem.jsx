@@ -56,8 +56,10 @@ const EditItem = () => {
 
       const result = await response.json()
 
-      if (result.success && result.item) {
-        const item = result.item
+      const itemPayload = result?.data || result?.item || null
+
+      if (result.success && itemPayload) {
+        const item = itemPayload
         
         // Set form values
         setValue('title', item.title)

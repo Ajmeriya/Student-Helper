@@ -7,6 +7,8 @@ public class AuthResponse {
     private Boolean success;
     private String message;
     private String token;
+    private String email;
+    private Boolean requiresVerification;
     private UserData user;
 
     @Data

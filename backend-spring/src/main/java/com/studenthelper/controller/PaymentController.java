@@ -1,9 +1,11 @@
 package com.studenthelper.controller;
 
-import com.studenthelper.entity.Payment;
+import com.studenthelper.dto.PaymentRequest;
+import com.studenthelper.dto.PaymentResponse;
 import com.studenthelper.entity.User;
 import com.studenthelper.service.PaymentService;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,7 +15,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,7 +31,7 @@ public class PaymentController {
 
     @PostMapping("/create-order")
     public ResponseEntity<Map<String, Object>> createPaymentOrder(
-            @RequestBody Map<String, Object> requestData,
+            @Valid @RequestBody PaymentRequest paymentRequest,
             HttpServletRequest request) {
         try {
             User user = (User) request.getAttribute("user");
@@ -48,35 +49,15 @@ public class PaymentController {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
             }
 
-            String paymentTypeStr = (String) requestData.get("paymentType");
-            Long entityId = Long.parseLong(requestData.get("entityId").toString());
-            Double amount = Double.parseDouble(requestData.get("amount").toString());
-            String currency = (String) requestData.getOrDefault("currency", "INR");
-
-            Payment.PaymentType paymentType = Payment.PaymentType.valueOf(paymentTypeStr);
-
-            LocalDateTime bookingStartDate = null;
-            LocalDateTime bookingEndDate = null;
-            if (requestData.containsKey("bookingStartDate")) {
-                bookingStartDate = LocalDateTime.parse(requestData.get("bookingStartDate").toString());
-            }
-            if (requestData.containsKey("bookingEndDate")) {
-                bookingEndDate = LocalDateTime.parse(requestData.get("bookingEndDate").toString());
-            }
-
-            String notes = (String) requestData.getOrDefault("notes", "");
-            boolean isDummy = Boolean.parseBoolean(requestData.getOrDefault("dummy", "true").toString());
-
-            Payment payment = paymentService.createPaymentOrder(
-                    user.getId(), paymentType, entityId, amount, currency,
-                    bookingStartDate, bookingEndDate, notes, isDummy);
+            PaymentResponse paymentResponse = paymentService.createPaymentOrder(user.getId(), paymentRequest);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("orderId", payment.getRazorpayOrderId());
-            response.put("amount", payment.getAmount());
-            response.put("currency", payment.getCurrency());
-            response.put("paymentId", payment.getId());
+            response.put("orderId", paymentResponse.getRazorpayOrderId());
+            response.put("amount", paymentResponse.getAmount());
+            response.put("currency", paymentResponse.getCurrency());
+            response.put("paymentId", paymentResponse.getId());
+            response.put("payment", paymentResponse);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             logger.error("Error creating payment order", e);
@@ -105,14 +86,14 @@ public class PaymentController {
                 }
             }
 
-            Payment payment = paymentService.verifyPayment(
+            PaymentResponse paymentResponse = paymentService.verifyPayment(
                     razorpayOrderId, razorpayPaymentId, razorpaySignature);
 
             Map<String, Object> response = new HashMap<>();
-            response.put("success", payment.getStatus() == Payment.PaymentStatus.SUCCESS);
-            response.put("message", payment.getStatus() == Payment.PaymentStatus.SUCCESS
+            response.put("success", "SUCCESS".equals(paymentResponse.getStatus()));
+            response.put("message", "SUCCESS".equals(paymentResponse.getStatus())
                     ? "Payment verified successfully" : "Payment verification failed");
-            response.put("payment", payment);
+            response.put("payment", paymentResponse);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             logger.error("Error verifying payment", e);
@@ -141,11 +122,11 @@ public class PaymentController {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
             }
 
-            List<Payment> payments = paymentService.getPaymentsByPayer(user.getId());
+            List<PaymentResponse> paymentResponses = paymentService.getPaymentsByPayer(user.getId());
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("payments", payments);
+            response.put("payments", paymentResponses);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             logger.error("Error fetching payments", e);
@@ -174,11 +155,11 @@ public class PaymentController {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
             }
 
-            List<Payment> payments = paymentService.getPaymentsByReceiver(user.getId());
+            List<PaymentResponse> paymentResponses = paymentService.getPaymentsByReceiver(user.getId());
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("payments", payments);
+            response.put("payments", paymentResponses);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             logger.error("Error fetching received payments", e);

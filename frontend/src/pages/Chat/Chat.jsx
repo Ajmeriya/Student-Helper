@@ -124,8 +124,8 @@ const Chat = () => {
         // Map backend messages to frontend format
         const mappedMessages = result.messages.map(msg => ({
           id: msg._id || msg.id,
-          senderId: (msg.sender._id || msg.sender.id)?.toString(),
-          senderName: msg.sender.name,
+          senderId: (msg.senderId || msg.sender?._id || msg.sender?.id)?.toString(),
+          senderName: msg.senderName || msg.sender?.name || 'Unknown',
           text: msg.content,
           timestamp: new Date(msg.createdAt),
           read: msg.read
@@ -253,8 +253,8 @@ const Chat = () => {
           const filtered = prev.filter(msg => msg.id !== tempMessage.id)
           const newMsg = {
             id: result.data._id || result.data.id,
-            senderId: result.data.sender._id || result.data.sender.id,
-            senderName: result.data.sender.name,
+            senderId: (result.data.senderId || result.data.sender?._id || result.data.sender?.id)?.toString(),
+            senderName: result.data.senderName || result.data.sender?.name || user?.name || 'You',
             text: result.data.content,
             timestamp: new Date(result.data.createdAt),
             read: result.data.read

@@ -15,18 +15,47 @@ const AddPG = () => {
   const [videos, setVideos] = useState([])
   const [coordinates, setCoordinates] = useState(null)
 
+  const MAX_IMAGE_MB = 10
+  const MAX_VIDEO_MB = 50
+  const MAX_IMAGE_BYTES = MAX_IMAGE_MB * 1024 * 1024
+  const MAX_VIDEO_BYTES = MAX_VIDEO_MB * 1024 * 1024
+
   const watchAC = watch('ac')
   const watchFurnished = watch('furnished')
   const watchOwnerOnFirstFloor = watch('ownerOnFirstFloor')
 
   const handleImageUpload = (e) => {
     const files = Array.from(e.target.files)
-    setImages(prev => [...prev, ...files])
+    const validFiles = []
+
+    files.forEach((file) => {
+      if (file.size > MAX_IMAGE_BYTES) {
+        toast.error(`${file.name} exceeds ${MAX_IMAGE_MB}MB image limit`)
+      } else {
+        validFiles.push(file)
+      }
+    })
+
+    if (validFiles.length > 0) {
+      setImages(prev => [...prev, ...validFiles])
+    }
   }
 
   const handleVideoUpload = (e) => {
     const files = Array.from(e.target.files)
-    setVideos(prev => [...prev, ...files])
+    const validFiles = []
+
+    files.forEach((file) => {
+      if (file.size > MAX_VIDEO_BYTES) {
+        toast.error(`${file.name} exceeds ${MAX_VIDEO_MB}MB video limit`)
+      } else {
+        validFiles.push(file)
+      }
+    })
+
+    if (validFiles.length > 0) {
+      setVideos(prev => [...prev, ...validFiles])
+    }
   }
 
   const handleMapClick = (e) => {
@@ -56,7 +85,14 @@ const AddPG = () => {
       
       // Also check user data
       const userData = localStorage.getItem('user')
-      console.log('👤 User data:', userData ? JSON.parse(userData) : 'NOT FOUND')
+      const parsedUser = userData ? JSON.parse(userData) : null
+      console.log('👤 User data:', parsedUser || 'NOT FOUND')
+
+      const cityValue = (user?.city || parsedUser?.city || '').toString().trim()
+      if (!cityValue) {
+        toast.error('City is missing in profile. Please update your profile and try again.')
+        return
+      }
 
       // Create FormData for file uploads
       const formData = new FormData()
@@ -64,7 +100,7 @@ const AddPG = () => {
       // Add text fields
       formData.append('title', data.title)
       formData.append('location', data.location)
-      formData.append('city', user.city)
+      formData.append('city', cityValue)
       formData.append('collegeName', data.collegeName)
       formData.append('sharingType', data.sharingType)
       formData.append('bedrooms', parseInt(data.bedrooms))
@@ -144,6 +180,15 @@ const AddPG = () => {
           }, 1000)
           return
         }
+
+        // Surface backend field-level validation details when available.
+        if (result?.data && typeof result.data === 'object') {
+          const validationMessages = Object.entries(result.data)
+            .map(([field, message]) => `${field}: ${message}`)
+            .join(', ')
+          throw new Error(validationMessages || result.message || result.error || 'Failed to create PG')
+        }
+
         throw new Error(result.message || result.error || 'Failed to create PG')
       }
 

@@ -1,7 +1,7 @@
 package com.studenthelper.controller;
 
+import com.studenthelper.service.DistanceService;
 import com.studenthelper.util.DistanceUtil;
-import com.studenthelper.util.GeocodingUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -15,10 +15,7 @@ import java.util.Map;
 public class DistanceController {
 
     @Autowired
-    private GeocodingUtil geocodingUtil;
-
-    @Autowired
-    private DistanceUtil distanceUtil;
+    private DistanceService distanceService;
 
     @PostMapping("/geocode")
     public ResponseEntity<Map<String, Object>> geocode(@RequestBody Map<String, String> request) {
@@ -33,7 +30,7 @@ public class DistanceController {
                 return ResponseEntity.badRequest().body(response);
             }
 
-            GeocodingUtil.GeocodeResult result = geocodingUtil.geocodeAddress(address, city);
+            com.studenthelper.util.GeocodingUtil.GeocodeResult result = distanceService.geocode(address, city);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -77,35 +74,11 @@ public class DistanceController {
                 return ResponseEntity.ok(response);
             }
 
-            try {
-                String address = geocodingUtil.reverseGeocode(lat, lng);
-                String addressLower = address.toLowerCase();
-                String[] waterTerms = {"ocean", "sea", "water", "lake", "river", "bay", "gulf", "strait"};
-                boolean isWater = false;
-                for (String term : waterTerms) {
-                    if (addressLower.contains(term)) {
-                        isWater = true;
-                        break;
-                    }
-                }
-
-                Map<String, Object> response = new HashMap<>();
-                response.put("success", true);
-                response.put("valid", !isWater);
-                if (isWater) {
-                    response.put("message", "This location appears to be in water. Please select a location on land.");
-                } else {
-                    response.put("message", "Location is valid");
-                    response.put("address", address);
-                }
-                return ResponseEntity.ok(response);
-            } catch (Exception e) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("success", true);
-                response.put("valid", true);
-                response.put("message", "Location validation completed");
-                return ResponseEntity.ok(response);
-            }
+            Map<String, Object> validationResult = distanceService.validateLocation(lat, lng);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.putAll(validationResult);
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
@@ -138,7 +111,7 @@ public class DistanceController {
                     Double.parseDouble(originCoords.get("lng").toString())
                 );
             } else if (address != null && !address.trim().isEmpty()) {
-                GeocodingUtil.GeocodeResult geocoded = geocodingUtil.geocodeAddress(address, null);
+                com.studenthelper.util.GeocodingUtil.GeocodeResult geocoded = distanceService.geocode(address, null);
                 sourceCoords = new DistanceUtil.Coordinates(geocoded.getLat(), geocoded.getLng());
             } else {
                 Map<String, Object> response = new HashMap<>();
@@ -152,7 +125,7 @@ public class DistanceController {
                 Double.parseDouble(destCoords.get("lng").toString())
             );
 
-            DistanceUtil.DistanceResult result = distanceUtil.calculateRoadDistance(sourceCoords, targetCoords);
+            DistanceUtil.DistanceResult result = distanceService.calculateDistance(sourceCoords, targetCoords);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);

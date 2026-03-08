@@ -15,6 +15,7 @@ import {
   FaCalendarAlt
 } from 'react-icons/fa'
 import ImageGallery from 'react-image-gallery'
+import 'react-image-gallery/styles/css/image-gallery.css'
 import ReactPlayer from 'react-player'
 import MapComponent from '../../components/Common/MapComponent'
 import PricePrediction from '../../components/PG/PricePrediction'
@@ -35,6 +36,17 @@ const PGDetails = () => {
   const [markedLocation, setMarkedLocation] = useState(null) // Store marked location coordinates
   const [showLocationMap, setShowLocationMap] = useState(false) // Toggle map for marking location
   const [showPaymentModal, setShowPaymentModal] = useState(false)
+
+  const userCollegeCoordinates =
+    user?.collegeLocation?.coordinates?.lat != null &&
+    user?.collegeLocation?.coordinates?.lng != null &&
+    !isNaN(user.collegeLocation.coordinates.lat) &&
+    !isNaN(user.collegeLocation.coordinates.lng)
+      ? {
+          lat: parseFloat(user.collegeLocation.coordinates.lat),
+          lng: parseFloat(user.collegeLocation.coordinates.lng)
+        }
+      : null
 
   useEffect(() => {
     const fetchPG = async () => {
@@ -67,54 +79,56 @@ const PGDetails = () => {
         const result = await response.json()
         console.log('📦 API Response:', result)
 
-        if (result.success && result.pg) {
-          console.log('✅ PG data received:', result.pg)
+        const pgPayload = result?.data || result?.pg || null
+
+        if (result.success && pgPayload) {
+          console.log('✅ PG data received:', pgPayload)
           // Map backend data to frontend format
           const pgData = {
-            id: result.pg._id || result.pg.id,
-            title: result.pg.title,
-            location: result.pg.location,
-            address: result.pg.location, // Use location as address
-            price: result.pg.price,
-            bedrooms: result.pg.bedrooms,
-            bathrooms: result.pg.bathrooms,
-            sharingType: result.pg.sharingType,
-            floorNumber: result.pg.floorNumber,
-            ac: result.pg.ac,
-            furnished: result.pg.furnished,
-            ownerOnFirstFloor: result.pg.ownerOnFirstFloor,
-            foodAvailable: result.pg.foodAvailable,
-            powerBackup: result.pg.powerBackup,
-            parking: result.pg.parking,
-            waterSupply: result.pg.waterSupply,
-            distanceToCollege: result.pg.distanceToCollege || 0,
-            collegeName: result.pg.collegeName,
-            instructions: result.pg.instructions,
-            nearbyLandmarks: result.pg.nearbyLandmarks,
-            preferredTenant: result.pg.preferredTenant,
-            availabilityDate: result.pg.availabilityDate,
-            securityDeposit: result.pg.securityDeposit,
-            maintenance: result.pg.maintenance,
-            images: result.pg.images || [],
-            videos: result.pg.videos || [],
-            coordinates: result.pg.coordinates && result.pg.coordinates.lat && result.pg.coordinates.lng
+            id: pgPayload._id || pgPayload.id,
+            title: pgPayload.title,
+            location: pgPayload.location,
+            address: pgPayload.location, // Use location as address
+            price: pgPayload.price,
+            bedrooms: pgPayload.bedrooms,
+            bathrooms: pgPayload.bathrooms,
+            sharingType: pgPayload.sharingType,
+            floorNumber: pgPayload.floorNumber,
+            ac: pgPayload.ac,
+            furnished: pgPayload.furnished,
+            ownerOnFirstFloor: pgPayload.ownerOnFirstFloor,
+            foodAvailable: pgPayload.foodAvailable,
+            powerBackup: pgPayload.powerBackup,
+            parking: pgPayload.parking,
+            waterSupply: pgPayload.waterSupply,
+            distanceToCollege: pgPayload.distanceToCollege || 0,
+            collegeName: pgPayload.collegeName,
+            instructions: pgPayload.instructions,
+            nearbyLandmarks: pgPayload.nearbyLandmarks,
+            preferredTenant: pgPayload.preferredTenant,
+            availabilityDate: pgPayload.availabilityDate,
+            securityDeposit: pgPayload.securityDeposit,
+            maintenance: pgPayload.maintenance,
+            images: pgPayload.images || [],
+            videos: pgPayload.videos || [],
+            coordinates: pgPayload.coordinates && pgPayload.coordinates.lat && pgPayload.coordinates.lng
               ? {
-                  lat: parseFloat(result.pg.coordinates.lat),
-                  lng: parseFloat(result.pg.coordinates.lng)
+                  lat: parseFloat(pgPayload.coordinates.lat),
+                  lng: parseFloat(pgPayload.coordinates.lng)
                 }
               : null,
-            status: result.pg.status || 'available',
-            soldDate: result.pg.soldDate,
-            rentalPeriod: result.pg.rentalPeriod,
-            rentalStartDate: result.pg.rentalStartDate,
-            rentalEndDate: result.pg.rentalEndDate,
-            estimatedTravelTime: result.pg.estimatedTravelTime,
-            distanceMethod: result.pg.distanceMethod,
-            broker: result.pg.broker ? {
-              name: result.pg.broker.name,
-              email: result.pg.broker.email,
-              phoneNumber: result.pg.broker.phoneNumber,
-              id: result.pg.broker._id || result.pg.broker.id
+            status: pgPayload.status || 'available',
+            soldDate: pgPayload.soldDate,
+            rentalPeriod: pgPayload.rentalPeriod,
+            rentalStartDate: pgPayload.rentalStartDate,
+            rentalEndDate: pgPayload.rentalEndDate,
+            estimatedTravelTime: pgPayload.estimatedTravelTime,
+            distanceMethod: pgPayload.distanceMethod,
+            broker: pgPayload.broker ? {
+              name: pgPayload.broker.name,
+              email: pgPayload.broker.email,
+              phoneNumber: pgPayload.broker.phoneNumber,
+              id: pgPayload.broker._id || pgPayload.broker.id
             } : null
           }
           
@@ -145,7 +159,7 @@ const PGDetails = () => {
     } else {
       setLoading(false)
       toast.error('Invalid PG ID')
-      navigate('/student/pgs')
+      navigate('/student/pg')
     }
   }, [id, navigate])
 
@@ -159,6 +173,61 @@ const PGDetails = () => {
       }
     } else {
       toast.error('Broker information not available')
+    }
+  }
+
+  const calculateDistanceFrom = async (originCoordinates, originLabel) => {
+    if (!originCoordinates?.lat || !originCoordinates?.lng) {
+      toast.error('Origin location is not available')
+      return
+    }
+    if (!pg?.coordinates?.lat || !pg?.coordinates?.lng) {
+      toast.error('PG location not available')
+      return
+    }
+
+    setCalculatingDistance(true)
+    try {
+      const response = await fetch(`${API_BASE_URL}/distance/calculate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          originCoordinates: {
+            lat: parseFloat(originCoordinates.lat),
+            lng: parseFloat(originCoordinates.lng)
+          },
+          destinationCoordinates: {
+            lat: parseFloat(pg.coordinates.lat),
+            lng: parseFloat(pg.coordinates.lng)
+          }
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`)
+      }
+
+      const result = await response.json()
+      if (result.success) {
+        setCustomDistance({
+          distance: result.data.distance,
+          duration: result.data.duration,
+          method: result.data.method
+        })
+        setCustomAddress(originLabel)
+        toast.success(`Distance calculated: ${result.data.distance.toFixed(2)} km`)
+      } else {
+        toast.error(result.message || 'Failed to calculate distance')
+      }
+    } catch (error) {
+      console.error('Error calculating distance:', error)
+      toast.error('Failed to calculate distance: ' + (error.message || 'Unknown error'))
+    } finally {
+      setCalculatingDistance(false)
     }
   }
 
@@ -176,7 +245,7 @@ const PGDetails = () => {
         <div className="text-center">
           <p className="text-gray-600 text-lg mb-4">PG not found or failed to load</p>
           <button
-            onClick={() => navigate('/student/pgs')}
+            onClick={() => navigate('/student/pg')}
             className="bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 transition"
           >
             Back to PG List
@@ -216,7 +285,7 @@ const PGDetails = () => {
         <div className="text-center">
           <p className="text-gray-600 text-lg mb-4">PG not found or failed to load</p>
           <button
-            onClick={() => navigate('/student/pgs')}
+            onClick={() => navigate('/student/pg')}
             className="bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 transition"
           >
             Back to PG List
@@ -234,7 +303,7 @@ const PGDetails = () => {
         <div className="text-center">
           <p className="text-gray-600 text-lg mb-4">Invalid PG data - missing required fields</p>
           <button
-            onClick={() => navigate('/student/pgs')}
+            onClick={() => navigate('/student/pg')}
             className="bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 transition"
           >
             Back to PG List
@@ -351,21 +420,23 @@ const PGDetails = () => {
                         .image-gallery-container .image-gallery-slide-wrapper {
                           width: 100%;
                           position: relative;
+                          border-radius: 0.75rem;
+                          overflow: hidden;
+                          background-color: #f1f5f9;
                         }
+                        .image-gallery-container .image-gallery-swipe,
+                        .image-gallery-container .image-gallery-slides,
                         .image-gallery-container .image-gallery-slide {
                           width: 100%;
-                          height: auto;
-                          min-height: 400px;
-                          max-height: 600px;
+                          height: clamp(260px, 42vw, 520px);
                         }
+                        .image-gallery-container .image-gallery-slide .image-gallery-image,
                         .image-gallery-container .image-gallery-slide img {
                           width: 100%;
                           height: 100%;
-                          min-height: 400px;
-                          max-height: 600px;
-                          object-fit: contain;
+                          object-fit: cover;
                           object-position: center;
-                          background-color: #f3f4f6;
+                          background-color: #e2e8f0;
                         }
                         .image-gallery-container .image-gallery-thumbnail {
                           width: 100px;
@@ -381,7 +452,7 @@ const PGDetails = () => {
                           object-position: center;
                         }
                         .image-gallery-container .image-gallery-thumbnails {
-                          padding: 15px 0;
+                          padding: 12px 8px;
                           text-align: center;
                           background-color: #f9fafb;
                           border-top: 1px solid #e5e7eb;
@@ -395,16 +466,94 @@ const PGDetails = () => {
                           opacity: 0.7;
                         }
                         .image-gallery-container .image-gallery-icon {
-                          color: #3b82f6;
+                          color: #334155;
+                          filter: none;
+                        }
+                        .image-gallery-container .image-gallery-left-nav,
+                        .image-gallery-container .image-gallery-right-nav {
+                          width: 44px;
+                          height: 44px;
+                          margin: 0 12px;
+                          padding: 0;
+                          border-radius: 9999px;
+                          border: 1px solid rgba(148, 163, 184, 0.45);
+                          background: rgba(255, 255, 255, 0.9);
+                          box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+                          transition: all 0.2s ease;
+                        }
+                        .image-gallery-container .image-gallery-left-nav:hover,
+                        .image-gallery-container .image-gallery-right-nav:hover {
+                          background: #ffffff;
+                          border-color: rgba(51, 65, 85, 0.3);
+                          box-shadow: 0 6px 16px rgba(15, 23, 42, 0.18);
+                        }
+                        .image-gallery-container .image-gallery-left-nav .image-gallery-svg,
+                        .image-gallery-container .image-gallery-right-nav .image-gallery-svg {
+                          width: 20px;
+                          height: 20px;
+                        }
+                        .image-gallery-container .image-gallery.fullscreen-modal {
+                          background: radial-gradient(circle at top, #0f172a 0%, #020617 65%);
+                          padding: 18px 0 0;
+                        }
+                        .image-gallery-container .image-gallery.fullscreen-modal .image-gallery-content {
+                          width: min(94vw, 1400px);
+                          margin: 0 auto;
+                        }
+                        .image-gallery-container .image-gallery.fullscreen-modal .image-gallery-slide-wrapper {
+                          border-radius: 1rem;
+                          background: rgba(15, 23, 42, 0.65);
+                          border: 1px solid rgba(148, 163, 184, 0.25);
+                        }
+                        .image-gallery-container .image-gallery.fullscreen-modal .image-gallery-swipe,
+                        .image-gallery-container .image-gallery.fullscreen-modal .image-gallery-slides,
+                        .image-gallery-container .image-gallery.fullscreen-modal .image-gallery-slide {
+                          height: calc(100vh - 210px);
+                          min-height: 320px;
+                        }
+                        .image-gallery-container .image-gallery.fullscreen-modal .image-gallery-slide .image-gallery-image,
+                        .image-gallery-container .image-gallery.fullscreen-modal .image-gallery-slide img {
+                          object-fit: contain;
+                          background: transparent;
+                        }
+                        .image-gallery-container .image-gallery.fullscreen-modal .image-gallery-thumbnails {
+                          background: transparent;
+                          border-top: none;
+                          padding: 14px 8px 18px;
+                        }
+                        .image-gallery-container .image-gallery.fullscreen-modal .image-gallery-left-nav,
+                        .image-gallery-container .image-gallery.fullscreen-modal .image-gallery-right-nav {
+                          background: rgba(15, 23, 42, 0.68);
+                          border-color: rgba(148, 163, 184, 0.35);
+                          box-shadow: 0 8px 18px rgba(2, 6, 23, 0.45);
+                        }
+                        .image-gallery-container .image-gallery.fullscreen-modal .image-gallery-icon {
+                          color: #e2e8f0;
                         }
                         @media (max-width: 768px) {
-                          .image-gallery-container .image-gallery-slide img {
-                            min-height: 300px;
-                            max-height: 400px;
+                          .image-gallery-container .image-gallery-swipe,
+                          .image-gallery-container .image-gallery-slides,
+                          .image-gallery-container .image-gallery-slide {
+                            height: clamp(220px, 58vw, 360px);
+                          }
+                          .image-gallery-container .image-gallery-left-nav,
+                          .image-gallery-container .image-gallery-right-nav {
+                            width: 38px;
+                            height: 38px;
+                            margin: 0 8px;
                           }
                           .image-gallery-container .image-gallery-thumbnail {
                             width: 80px;
                             height: 60px;
+                          }
+                          .image-gallery-container .image-gallery.fullscreen-modal .image-gallery-content {
+                            width: 100vw;
+                          }
+                          .image-gallery-container .image-gallery.fullscreen-modal .image-gallery-swipe,
+                          .image-gallery-container .image-gallery.fullscreen-modal .image-gallery-slides,
+                          .image-gallery-container .image-gallery.fullscreen-modal .image-gallery-slide {
+                            height: calc(100vh - 170px);
+                            min-height: 240px;
                           }
                         }
                       `}</style>
@@ -817,6 +966,21 @@ const PGDetails = () => {
                     <p className="text-xs text-gray-500">
                       💡 Click anywhere on the map to mark your location | 📍 Blue marker: PG location | 🎓 Red marker: {markedLocation ? 'Your marked location' : 'Your college (from profile)'}
                     </p>
+
+                    <div className="flex flex-col gap-2">
+                      <button
+                        onClick={() => calculateDistanceFrom(userCollegeCoordinates, 'Saved college location')}
+                        disabled={calculatingDistance || !userCollegeCoordinates}
+                        className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {calculatingDistance ? 'Calculating...' : 'Calculate Distance from Saved College Location'}
+                      </button>
+                      {!userCollegeCoordinates && (
+                        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                          Add your college location in profile or click on the map to mark a location manually.
+                        </p>
+                      )}
+                    </div>
                     
                     {/* Location Status and Actions */}
                     {markedLocation && (
@@ -832,70 +996,11 @@ const PGDetails = () => {
                         
                         <div className="flex gap-2">
                           <button
-                            onClick={async () => {
-                              if (!markedLocation) {
-                                toast.error('Please mark your location on the map first')
-                                return
-                              }
-                              if (!pg.coordinates || !pg.coordinates.lat || !pg.coordinates.lng) {
-                                toast.error('PG location not available')
-                                return
-                              }
-                              setCalculatingDistance(true)
-                              try {
-                                const url = `${API_BASE_URL}/distance/calculate`
-                                console.log('🔗 Calculating distance:', url)
-                                
-                                const response = await fetch(url, {
-                                  method: 'POST',
-                                  headers: {
-                                    'Content-Type': 'application/json',
-                                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                                  },
-                                  body: JSON.stringify({
-                                    originCoordinates: {
-                                      lat: markedLocation.lat,
-                                      lng: markedLocation.lng
-                                    },
-                                    destinationCoordinates: {
-                                      lat: parseFloat(pg.coordinates.lat),
-                                      lng: parseFloat(pg.coordinates.lng)
-                                    }
-                                  })
-                                })
-                                
-                                console.log('📡 Response status:', response.status, response.statusText)
-                                
-                                if (!response.ok) {
-                                  const errorText = await response.text()
-                                  console.error('❌ API Error:', errorText)
-                                  throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-                                }
-                                
-                                const result = await response.json()
-                                console.log('✅ Distance result:', result)
-                                
-                                if (result.success) {
-                                  setCustomDistance({
-                                    distance: result.data.distance,
-                                    duration: result.data.duration,
-                                    method: result.data.method
-                                  })
-                                  toast.success(`Distance calculated: ${result.data.distance.toFixed(2)} km`)
-                                } else {
-                                  toast.error(result.message || 'Failed to calculate distance')
-                                }
-                              } catch (error) {
-                                console.error('❌ Error calculating distance:', error)
-                                toast.error('Failed to calculate distance: ' + (error.message || 'Unknown error'))
-                              } finally {
-                                setCalculatingDistance(false)
-                              }
-                            }}
+                            onClick={() => calculateDistanceFrom(markedLocation, 'Marked location')}
                             disabled={calculatingDistance || !markedLocation}
                             className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            {calculatingDistance ? 'Calculating...' : 'Calculate Distance'}
+                            {calculatingDistance ? 'Calculating...' : 'Calculate from Marked Location'}
                           </button>
                           <button
                             onClick={() => {

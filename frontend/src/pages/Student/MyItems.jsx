@@ -50,7 +50,11 @@ const MyItems = () => {
       console.log('API Response:', result)
 
       if (result.success) {
-        const itemsList = Array.isArray(result.items) ? result.items : []
+        const itemsList = Array.isArray(result?.data)
+          ? result.data
+          : Array.isArray(result?.items)
+            ? result.items
+            : []
         setItems(itemsList)
         
         if (itemsList.length === 0) {

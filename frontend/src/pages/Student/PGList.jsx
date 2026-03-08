@@ -5,6 +5,7 @@ import FilterPanel from '../../components/Common/FilterPanel'
 import { FaSearch, FaFilter, FaTimes } from 'react-icons/fa'
 import { motion } from 'framer-motion'
 import { API_BASE_URL } from '../../utils/constants'
+import toast from 'react-hot-toast'
 
 const PGList = () => {
   const { user } = useAuth()
@@ -67,9 +68,21 @@ const PGList = () => {
         const response = await fetch(`${API_BASE_URL}/pg?${params.toString()}`)
         const result = await response.json()
 
-        if (result.success) {
-          // Map backend data to frontend format
-          const mappedPGs = result.pgs.map(pg => ({
+        if (!response.ok || !result.success) {
+          throw new Error(result.message || 'Failed to fetch PGs')
+        }
+
+        // Support current paged API shape and older array shape.
+        const pgList = Array.isArray(result?.data?.content)
+          ? result.data.content
+          : Array.isArray(result?.data)
+            ? result.data
+            : Array.isArray(result?.pgs)
+              ? result.pgs
+              : []
+
+        // Map backend data to frontend format
+        const mappedPGs = pgList.map(pg => ({
             id: pg._id || pg.id,
             title: pg.title,
             location: pg.location,
@@ -90,17 +103,12 @@ const PGList = () => {
             collegeName: pg.collegeName,
             ...pg // Include all other fields
           }))
-          
-          setPgs(mappedPGs)
-          setFilteredPGs(mappedPGs) // Set both - filtering is done by API
-        } else {
-          toast.error(result.message || 'Failed to fetch PGs')
-          setPgs([])
-          setFilteredPGs([])
-        }
+
+        setPgs(mappedPGs)
+        setFilteredPGs(mappedPGs) // Set both - filtering is done by API
       } catch (error) {
         console.error('Error fetching PGs:', error)
-        toast.error('Failed to fetch PGs')
+        toast.error(error.message || 'Failed to fetch PGs')
         setPgs([])
         setFilteredPGs([])
       } finally {

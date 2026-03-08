@@ -1,10 +1,11 @@
 package com.studenthelper.controller;
 
-import com.studenthelper.entity.Message;
+import com.studenthelper.dto.MessageRequest;
+import com.studenthelper.dto.MessageResponse;
 import com.studenthelper.entity.User;
-import com.studenthelper.repository.MessageRepository;
-import com.studenthelper.repository.UserRepository;
+import com.studenthelper.service.MessageService;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,7 +15,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
 import java.util.*;
 
 @RestController
@@ -25,10 +25,7 @@ public class MessageController {
     private static final Logger logger = LoggerFactory.getLogger(MessageController.class);
 
     @Autowired
-    private MessageRepository messageRepository;
-
-    @Autowired
-    private UserRepository userRepository;
+    private MessageService messageService;
 
     @GetMapping("/conversations")
     public ResponseEntity<Map<String, Object>> getConversations(HttpServletRequest request) {
@@ -38,42 +35,7 @@ public class MessageController {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
             }
 
-            List<Message> messages = messageRepository.findBySenderIdOrReceiverId(userId, userId);
-            
-            Map<Long, Map<String, Object>> conversationsMap = new HashMap<>();
-            
-            for (Message msg : messages) {
-                Long partnerId = msg.getSender().getId().equals(userId) 
-                    ? msg.getReceiver().getId() 
-                    : msg.getSender().getId();
-                
-                if (!conversationsMap.containsKey(partnerId)) {
-                    User partner = msg.getSender().getId().equals(userId) 
-                        ? msg.getReceiver() 
-                        : msg.getSender();
-                    
-                    Map<String, Object> conv = new HashMap<>();
-                    Map<String, Object> userData = new HashMap<>();
-                    userData.put("id", partner.getId());
-                    userData.put("name", partner.getName());
-                    userData.put("email", partner.getEmail());
-                    conv.put("user", userData);
-                    conv.put("lastMessage", msg.getContent());
-                    conv.put("lastMessageTime", msg.getCreatedAt());
-                    conv.put("unreadCount", 0);
-                    conv.put("relatedTo", msg.getRelatedTo());
-                    conversationsMap.put(partnerId, conv);
-                }
-                
-                if (msg.getReceiver().getId().equals(userId) && !msg.getRead()) {
-                    conversationsMap.get(partnerId).put("unreadCount", 
-                        ((Integer) conversationsMap.get(partnerId).get("unreadCount")) + 1);
-                }
-            }
-
-            List<Map<String, Object>> conversations = new ArrayList<>(conversationsMap.values());
-            conversations.sort((a, b) -> ((LocalDateTime) b.get("lastMessageTime"))
-                .compareTo((LocalDateTime) a.get("lastMessageTime")));
+            List<Map<String, Object>> conversations = messageService.getConversations(userId);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -97,20 +59,7 @@ public class MessageController {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
             }
 
-            List<Message> messages = messageRepository.findBySenderIdAndReceiverIdOrSenderIdAndReceiverId(
-                currentUserId, userId, userId, currentUserId);
-
-            // Sort messages by createdAt (oldest first) - like WhatsApp
-            messages.sort((a, b) -> a.getCreatedAt().compareTo(b.getCreatedAt()));
-
-            // Mark as read
-            for (Message msg : messages) {
-                if (msg.getReceiver().getId().equals(currentUserId) && !msg.getRead()) {
-                    msg.setRead(true);
-                    msg.setReadAt(LocalDateTime.now());
-                    messageRepository.save(msg);
-                }
-            }
+            List<MessageResponse> messages = messageService.getMessages(currentUserId, userId);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -127,56 +76,27 @@ public class MessageController {
     }
 
     @PostMapping
-    public ResponseEntity<Map<String, Object>> sendMessage(@RequestBody Map<String, Object> requestData, HttpServletRequest request) {
+    public ResponseEntity<Map<String, Object>> sendMessage(
+            @Valid @RequestBody MessageRequest messageRequest, 
+            HttpServletRequest request) {
         try {
             Long senderId = (Long) request.getAttribute("userId");
             if (senderId == null) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
             }
 
-            Long receiverId = Long.parseLong(requestData.get("receiverId").toString());
-            String content = (String) requestData.get("content");
-
-            if (receiverId.equals(senderId)) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("success", false);
-                response.put("message", "Cannot send message to yourself");
-                return ResponseEntity.badRequest().body(response);
-            }
-
-            User receiver = userRepository.findById(receiverId).orElse(null);
-            if (receiver == null) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("success", false);
-                response.put("message", "Receiver not found");
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
-            }
-
-            User sender = userRepository.findById(senderId).orElseThrow();
-
-            Message message = new Message();
-            message.setSender(sender);
-            message.setReceiver(receiver);
-            message.setContent(content.trim());
-            message.setRead(false);
-
-            @SuppressWarnings("unchecked")
-            Map<String, Object> relatedTo = (Map<String, Object>) requestData.get("relatedTo");
-            if (relatedTo != null) {
-                Message.RelatedTo related = new Message.RelatedTo();
-                related.setType(Message.RelatedTo.RelatedToType.valueOf(
-                    relatedTo.get("type").toString()));
-                related.setRelatedId(Long.parseLong(relatedTo.get("id").toString()));
-                message.setRelatedTo(related);
-            }
-
-            Message savedMessage = messageRepository.save(message);
+            MessageResponse savedMessage = messageService.sendMessage(senderId, messageRequest);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("message", "Message sent successfully");
             response.put("data", savedMessage);
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        } catch (RuntimeException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(response);
         } catch (Exception e) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
@@ -194,7 +114,7 @@ public class MessageController {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
             }
 
-            long count = messageRepository.countByReceiverIdAndReadFalse(userId);
+            long count = messageService.getUnreadCount(userId);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -228,28 +148,20 @@ public class MessageController {
                 }
             }
 
-            Message message = messageRepository.findById(messageId).orElse(null);
-            if (message == null) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("success", false);
-                response.put("message", "Message not found");
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
-            }
-
-            // Only allow deletion if user is the sender
-            if (!message.getSender().getId().equals(userId)) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("success", false);
-                response.put("message", "You can only delete your own messages");
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
-            }
-
-            messageRepository.delete(message);
+            messageService.deleteMessage(messageId, userId);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("message", "Message deleted successfully");
             return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            if (e.getMessage().contains("not found")) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+            }
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
         } catch (Exception e) {
             logger.error("Error deleting message: " + messageId, e);
             Map<String, Object> response = new HashMap<>();

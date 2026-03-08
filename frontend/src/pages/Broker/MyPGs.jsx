@@ -11,6 +11,12 @@ const MyPGs = () => {
   const navigate = useNavigate()
   const [pgs, setPgs] = useState([])
   const [loading, setLoading] = useState(true)
+  const [rentModal, setRentModal] = useState({
+    isOpen: false,
+    pgId: null,
+    months: '',
+    error: ''
+  })
 
   useEffect(() => {
     if (user) {
@@ -29,7 +35,8 @@ const MyPGs = () => {
         return
       }
 
-      if (!user || user.role !== 'broker') {
+      const normalizedRole = (user?.role || '').toString().toLowerCase()
+      if (!user || normalizedRole !== 'broker') {
         toast.error('Access denied. Only brokers can view their PGs.')
         navigate('/login')
         return
@@ -53,8 +60,14 @@ const MyPGs = () => {
       console.log('API Response:', result) // Debug log
 
       if (result.success) {
-        // Use the PGs directly from backend (already in correct format)
-        const pgsList = Array.isArray(result.pgs) ? result.pgs : []
+        // Backend list responses are returned in result.data.
+        const pgsList = Array.isArray(result.data)
+          ? result.data
+          : Array.isArray(result.pgs)
+            ? result.pgs
+            : Array.isArray(result.data?.content)
+              ? result.data.content
+              : []
         setPgs(pgsList)
         
         if (location.state?.showSuccess) {
@@ -154,6 +167,38 @@ const MyPGs = () => {
     }
   }
 
+  const openRentModal = (pgId) => {
+    setRentModal({
+      isOpen: true,
+      pgId,
+      months: '',
+      error: ''
+    })
+  }
+
+  const closeRentModal = () => {
+    setRentModal({
+      isOpen: false,
+      pgId: null,
+      months: '',
+      error: ''
+    })
+  }
+
+  const submitRentPeriod = () => {
+    const months = parseInt(rentModal.months, 10)
+    if (!months || months <= 0) {
+      setRentModal((prev) => ({
+        ...prev,
+        error: 'Please enter a valid rental period in months.'
+      }))
+      return
+    }
+
+    handleStatusUpdate(rentModal.pgId, 'onRent', months)
+    closeRentModal()
+  }
+
   const getStatusBadge = (status) => {
     const badges = {
       available: 'bg-green-100 text-green-800',
@@ -181,23 +226,23 @@ const MyPGs = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="min-h-screen bg-gray-50 py-6 sm:py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">My PGs</h1>
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">My PGs</h1>
           <Link
             to="/broker/add-pg"
-            className="bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 transition"
+            className="w-full rounded-lg bg-primary-600 px-6 py-2.5 text-center text-white transition hover:bg-primary-700 sm:w-auto sm:py-2"
           >
             Add New PG
           </Link>
         </div>
 
         {pgs.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 lg:gap-6">
             {pgs.map((pg) => (
-              <div key={pg._id || pg.id} className="bg-white rounded-lg shadow-md overflow-hidden">
-                <div className="relative h-48 bg-gray-200">
+              <div key={pg._id || pg.id} className="overflow-hidden rounded-xl bg-white shadow-md">
+                <div className="relative h-44 bg-gray-200 sm:h-48">
                   {pg.images && pg.images.length > 0 ? (
                     <img
                       src={pg.images[0]}
@@ -215,13 +260,13 @@ const MyPGs = () => {
                     </span>
                   </div>
                 </div>
-                <div className="p-4">
-                  <h3 className="text-xl font-semibold mb-2">{pg.title}</h3>
-                  <p className="text-gray-600 mb-2">{pg.location}</p>
-                  <p className="text-lg font-bold text-primary-600 mb-2">₹{pg.price}/month</p>
+                <div className="p-3 sm:p-4">
+                  <h3 className="mb-1 text-lg font-semibold sm:mb-2 sm:text-xl">{pg.title}</h3>
+                  <p className="mb-2 line-clamp-2 text-sm text-gray-600 sm:text-base">{pg.location}</p>
+                  <p className="mb-2 text-base font-bold text-primary-600 sm:text-lg">₹{pg.price}/month</p>
                   
                   {/* Dates */}
-                  <div className="text-sm text-gray-500 mb-3 space-y-1">
+                  <div className="mb-3 space-y-1 text-xs text-gray-500 sm:text-sm">
                     <p>Posted: {formatDate(pg.createdAt)}</p>
                     {pg.soldDate && <p>Sold: {formatDate(pg.soldDate)}</p>}
                     {pg.status === 'onRent' && pg.rentalPeriod && (
@@ -236,16 +281,11 @@ const MyPGs = () => {
                   </div>
 
                   {/* Status Actions */}
-                  <div className="mb-3 flex flex-wrap gap-2">
+                  <div className="mb-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
                     {pg.status !== 'sold' && (
                       <button
-                        onClick={() => {
-                          const months = prompt('Enter rental period in months (e.g., 11):')
-                          if (months && parseInt(months) > 0) {
-                            handleStatusUpdate(pg._id || pg.id, 'onRent', parseInt(months))
-                          }
-                        }}
-                        className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded hover:bg-blue-200"
+                        onClick={() => openRentModal(pg._id || pg.id)}
+                        className="w-full rounded bg-blue-100 px-2 py-1.5 text-xs text-blue-800 hover:bg-blue-200 sm:w-auto"
                       >
                         Mark On Rent
                       </button>
@@ -257,7 +297,7 @@ const MyPGs = () => {
                             handleStatusUpdate(pg._id || pg.id, 'sold')
                           }
                         }}
-                        className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded hover:bg-red-200"
+                        className="w-full rounded bg-red-100 px-2 py-1.5 text-xs text-red-800 hover:bg-red-200 sm:w-auto"
                       >
                         Mark Sold
                       </button>
@@ -265,27 +305,27 @@ const MyPGs = () => {
                     {pg.status !== 'available' && (
                       <button
                         onClick={() => handleStatusUpdate(pg._id || pg.id, 'available')}
-                        className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded hover:bg-green-200"
+                        className="col-span-2 w-full rounded bg-green-100 px-2 py-1.5 text-xs text-green-800 hover:bg-green-200 sm:col-auto sm:w-auto"
                       >
                         Mark Available
                       </button>
                     )}
                   </div>
 
-                  <div className="flex space-x-2">
+                  <div className="flex gap-2">
                     <Link
                       to={`/broker/edit-pg/${pg._id || pg.id}`}
-                      className="flex-1 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition flex items-center justify-center space-x-2"
+                      className="flex flex-1 items-center justify-center space-x-2 rounded-lg bg-primary-600 px-4 py-2 text-white transition hover:bg-primary-700"
                     >
                       <FaEdit />
                       <span>Edit</span>
                     </Link>
                     <button
                       onClick={() => handleDelete(pg._id || pg.id)}
-                      className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition flex items-center justify-center space-x-2"
+                      className="flex items-center justify-center space-x-2 rounded-lg bg-red-600 px-4 py-2 text-white transition hover:bg-red-700"
                     >
                       <FaTrash />
-                      <span>Delete</span>
+                      <span className="hidden sm:inline">Delete</span>
                     </button>
                   </div>
                 </div>
@@ -304,6 +344,61 @@ const MyPGs = () => {
           </div>
         )}
       </div>
+
+      {rentModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/55 px-0 sm:items-center sm:px-4">
+          <div className="w-full max-w-md overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl sm:rounded-2xl">
+            <div className="bg-gradient-to-r from-sky-600 to-cyan-500 px-5 py-4 sm:px-6 sm:py-5">
+              <h3 className="text-lg font-semibold text-white">Set Rental Period</h3>
+              <p className="mt-1 text-sm text-sky-100">Enter rental period in months to mark this PG on rent.</p>
+            </div>
+
+            <div className="space-y-4 px-5 py-4 sm:px-6 sm:py-5">
+              <div>
+                <label htmlFor="rental-months" className="mb-2 block text-sm font-medium text-slate-700">
+                  Rental Period (months)
+                </label>
+                <input
+                  id="rental-months"
+                  type="number"
+                  min="1"
+                  value={rentModal.months}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/[^0-9]/g, '')
+                    setRentModal((prev) => ({ ...prev, months: value, error: '' }))
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      submitRentPeriod()
+                    }
+                  }}
+                  className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-slate-900 outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-100"
+                  placeholder="e.g., 11"
+                />
+                {rentModal.error && <p className="mt-2 text-sm text-rose-600">{rentModal.error}</p>}
+              </div>
+
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={closeRentModal}
+                  className="w-full rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 sm:w-auto"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={submitRentPeriod}
+                  className="w-full rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700 sm:w-auto"
+                >
+                  Confirm
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

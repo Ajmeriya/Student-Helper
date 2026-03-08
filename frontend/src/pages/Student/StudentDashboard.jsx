@@ -52,24 +52,24 @@ const StudentDashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="min-h-screen bg-gray-50 py-6 sm:py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          <div className="flex justify-between items-center mb-8">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 flex-1">
+              <h1 className="mb-2 break-words text-3xl font-bold leading-tight text-gray-900 sm:text-3xl">
                 Welcome back, {user?.name}!
               </h1>
-              <p className="text-gray-600">
+              <p className="break-words text-gray-600">
                 Find your perfect accommodation in {user?.city}
               </p>
             </div>
             <Link
               to="/student/profile"
-              className="flex items-center space-x-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition"
+              className="inline-flex w-full items-center justify-center space-x-2 rounded-lg bg-primary-600 px-4 py-2 text-white transition hover:bg-primary-700 sm:w-auto sm:shrink-0"
             >
               <FaUserEdit />
               <span>Edit Profile</span>
@@ -164,22 +164,22 @@ const StudentDashboard = () => {
           <p className="text-gray-600 mb-4">
             Buy and sell books, electronics, and other items with fellow students.
           </p>
-          <div className="flex space-x-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:space-x-0">
             <Link
               to="/student/marketplace"
-              className="inline-block bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 transition"
+              className="inline-block rounded-lg bg-primary-600 px-6 py-2 text-center text-white transition hover:bg-primary-700"
             >
               Visit Marketplace
             </Link>
             <Link
               to="/student/add-item"
-              className="inline-block bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition"
+              className="inline-block rounded-lg bg-green-600 px-6 py-2 text-center text-white transition hover:bg-green-700"
             >
               Add Item
             </Link>
             <Link
               to="/student/my-items"
-              className="inline-block bg-gray-600 text-white px-6 py-2 rounded-lg hover:bg-gray-700 transition"
+              className="inline-block rounded-lg bg-gray-600 px-6 py-2 text-center text-white transition hover:bg-gray-700"
             >
               My Items
             </Link>

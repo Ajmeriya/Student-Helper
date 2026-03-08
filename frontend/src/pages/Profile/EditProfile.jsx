@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext'
 import { API_BASE_URL, CITIES } from '../../utils/constants'
 import toast from 'react-hot-toast'
 import { FaUser, FaPhone, FaMapMarkerAlt, FaUniversity, FaSave, FaArrowLeft } from 'react-icons/fa'
+import MapComponent from '../../components/Common/MapComponent'
 
 const EditProfile = () => {
   const { user, setUser } = useAuth()
@@ -14,7 +15,10 @@ const EditProfile = () => {
     phoneNumber: '',
     city: '',
     collegeName: '',
-    collegeLocation: null
+    collegeLocation: {
+      address: '',
+      coordinates: null
+    }
   })
 
   useEffect(() => {
@@ -24,7 +28,16 @@ const EditProfile = () => {
         phoneNumber: user.phoneNumber || '',
         city: user.city || '',
         collegeName: user.collegeName || '',
-        collegeLocation: user.collegeLocation || null
+        collegeLocation: {
+          address: user.collegeLocation?.address || '',
+          coordinates:
+            user.collegeLocation?.coordinates?.lat != null && user.collegeLocation?.coordinates?.lng != null
+              ? {
+                  lat: parseFloat(user.collegeLocation.coordinates.lat),
+                  lng: parseFloat(user.collegeLocation.coordinates.lng)
+                }
+              : null
+        }
       })
     }
   }, [user])
@@ -34,6 +47,41 @@ const EditProfile = () => {
     setFormData(prev => ({
       ...prev,
       [name]: value
+    }))
+  }
+
+  const handleCollegeAddressChange = (e) => {
+    const { value } = e.target
+    setFormData((prev) => ({
+      ...prev,
+      collegeLocation: {
+        ...(prev.collegeLocation || {}),
+        address: value,
+        coordinates: prev.collegeLocation?.coordinates || null
+      }
+    }))
+  }
+
+  const handleCollegeMapClick = (e) => {
+    const { lat, lng } = e.latlng
+    setFormData((prev) => ({
+      ...prev,
+      collegeLocation: {
+        ...(prev.collegeLocation || {}),
+        address: prev.collegeLocation?.address || '',
+        coordinates: { lat, lng }
+      }
+    }))
+    toast.success(`College location updated: ${lat.toFixed(4)}, ${lng.toFixed(4)}`)
+  }
+
+  const clearCollegeLocation = () => {
+    setFormData((prev) => ({
+      ...prev,
+      collegeLocation: {
+        ...(prev.collegeLocation || {}),
+        coordinates: null
+      }
     }))
   }
 
@@ -60,8 +108,24 @@ const EditProfile = () => {
         if (formData.collegeName) {
           updateData.collegeName = formData.collegeName
         }
-        if (formData.collegeLocation) {
-          updateData.collegeLocation = formData.collegeLocation
+
+        const hasCollegeCoords =
+          formData.collegeLocation?.coordinates?.lat != null &&
+          formData.collegeLocation?.coordinates?.lng != null
+        const hasCollegeAddress = !!formData.collegeLocation?.address?.trim()
+
+        if (hasCollegeCoords || hasCollegeAddress) {
+          updateData.collegeLocation = {
+            ...(hasCollegeAddress ? { address: formData.collegeLocation.address.trim() } : {}),
+            ...(hasCollegeCoords
+              ? {
+                  coordinates: {
+                    lat: parseFloat(formData.collegeLocation.coordinates.lat),
+                    lng: parseFloat(formData.collegeLocation.coordinates.lng)
+                  }
+                }
+              : {})
+          }
         }
       }
 
@@ -189,20 +253,83 @@ const EditProfile = () => {
 
             {/* College Name (for students only) */}
             {user?.role === 'student' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  <FaUniversity className="inline mr-2" />
-                  College Name
-                </label>
-                <input
-                  type="text"
-                  name="collegeName"
-                  value={formData.collegeName}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  placeholder="Enter your college name"
-                />
-              </div>
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <FaUniversity className="inline mr-2" />
+                    College Name
+                  </label>
+                  <input
+                    type="text"
+                    name="collegeName"
+                    value={formData.collegeName}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="Enter your college name"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <FaMapMarkerAlt className="inline mr-2" />
+                    College Address (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.collegeLocation?.address || ''}
+                    onChange={handleCollegeAddressChange}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="Enter full college address"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <FaMapMarkerAlt className="inline mr-2" />
+                    College Location on Map
+                  </label>
+                  <div className="h-80 rounded-lg overflow-hidden border border-gray-300">
+                    <MapComponent
+                      center={formData.collegeLocation?.coordinates
+                        ? [
+                            parseFloat(formData.collegeLocation.coordinates.lat),
+                            parseFloat(formData.collegeLocation.coordinates.lng)
+                          ]
+                        : [22.6944, 72.8606]}
+                      zoom={formData.collegeLocation?.coordinates ? 14 : 11}
+                      onMapClick={handleCollegeMapClick}
+                      markers={[
+                        ...(formData.collegeLocation?.coordinates
+                          ? [
+                              {
+                                lat: parseFloat(formData.collegeLocation.coordinates.lat),
+                                lng: parseFloat(formData.collegeLocation.coordinates.lng),
+                                title: formData.collegeName || 'Your College'
+                              }
+                            ]
+                          : [])
+                      ]}
+                    />
+                  </div>
+                  <p className="mt-2 text-xs text-gray-500">
+                    Click on map to update your college location.
+                  </p>
+                  {formData.collegeLocation?.coordinates && (
+                    <div className="mt-2 flex items-center justify-between text-xs text-gray-600 bg-gray-50 border rounded-md px-3 py-2">
+                      <span>
+                        Lat: {Number(formData.collegeLocation.coordinates.lat).toFixed(6)} | Lng: {Number(formData.collegeLocation.coordinates.lng).toFixed(6)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={clearCollegeLocation}
+                        className="text-red-600 hover:text-red-700 font-medium"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </>
             )}
 
             {/* Email (read-only) */}

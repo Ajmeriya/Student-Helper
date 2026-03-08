@@ -5,7 +5,7 @@ This is the Spring Boot backend for the Student Helper application, migrated fro
 ## Setup Instructions
 
 1. **Prerequisites:**
-   - Java 17 or higher
+   - Java 24 or higher
    - Maven 3.6+
    - MySQL 8.0+
 
@@ -20,9 +20,24 @@ This is the Spring Boot backend for the Student Helper application, migrated fro
      - `CLOUDINARY_API_SECRET`
 
 4. **Run the Application:**
+   
+   **Windows:**
    ```bash
-   mvn spring-boot:run
+   run.bat
    ```
+   
+   **Linux/Mac:**
+   ```bash
+   chmod +x run.sh
+   ./run.sh
+   ```
+   
+   **Or manually:**
+   ```bash
+   mvn spring-boot:run -Dspring-boot.run.jvmArguments="--enable-native-access=ALL-UNNAMED"
+   ```
+   
+   **Note:** The `--enable-native-access=ALL-UNNAMED` JVM argument is required for Java 23+ to avoid warnings about restricted native access methods.
 
 5. **API Endpoints:**
    - Health: `GET /api/health`

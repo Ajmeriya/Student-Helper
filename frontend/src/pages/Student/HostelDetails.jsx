@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { 
   FaMapMarkerAlt, 
+  FaRoute,
   FaBed, 
   FaRupeeSign,
   FaCheck,
@@ -26,6 +27,19 @@ const HostelDetails = () => {
   const [activeTab, setActiveTab] = useState('overview')
   const [selectedImageIndex, setSelectedImageIndex] = useState(0)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [calculatingDistance, setCalculatingDistance] = useState(false)
+  const [collegeDistance, setCollegeDistance] = useState(null)
+
+  const collegeCoordinates =
+    user?.collegeLocation?.coordinates?.lat != null &&
+    user?.collegeLocation?.coordinates?.lng != null &&
+    !isNaN(user.collegeLocation.coordinates.lat) &&
+    !isNaN(user.collegeLocation.coordinates.lng)
+      ? {
+          lat: parseFloat(user.collegeLocation.coordinates.lat),
+          lng: parseFloat(user.collegeLocation.coordinates.lng)
+        }
+      : null
 
   useEffect(() => {
     if (id) {
@@ -48,39 +62,41 @@ const HostelDetails = () => {
       const result = await response.json()
       console.log('📦 API Response:', result)
 
-      if (result.success && result.hostel) {
+      const hostelPayload = result?.data || result?.hostel || null
+
+      if (result.success && hostelPayload) {
         // Map backend data to frontend format
         const hostelData = {
-          id: result.hostel._id || result.hostel.id,
-          name: result.hostel.name,
-          location: result.hostel.location,
-          address: result.hostel.address || result.hostel.location,
-          city: result.hostel.city,
-          gender: result.hostel.gender,
-          price: result.hostel.fees,
-          feesPeriod: result.hostel.feesPeriod || 'monthly',
-          roomsAvailable: result.hostel.availableRooms,
-          totalRooms: result.hostel.totalRooms,
-          facilities: result.hostel.facilities || {},
-          description: result.hostel.description,
-          rules: result.hostel.rules,
-          images: result.hostel.images || [],
-          videos: result.hostel.videos || [],
-          roomTypeImages: result.hostel.roomTypeImages || {},
-          coordinates: result.hostel.coordinates && result.hostel.coordinates.lat != null && result.hostel.coordinates.lng != null
+          id: hostelPayload._id || hostelPayload.id,
+          name: hostelPayload.name,
+          location: hostelPayload.location,
+          address: hostelPayload.address || hostelPayload.location,
+          city: hostelPayload.city,
+          gender: hostelPayload.gender,
+          price: hostelPayload.fees,
+          feesPeriod: hostelPayload.feesPeriod || 'monthly',
+          roomsAvailable: hostelPayload.availableRooms,
+          totalRooms: hostelPayload.totalRooms,
+          facilities: hostelPayload.facilities || {},
+          description: hostelPayload.description,
+          rules: hostelPayload.rules,
+          images: hostelPayload.images || [],
+          videos: hostelPayload.videos || [],
+          roomTypeImages: hostelPayload.roomTypeImages || {},
+          coordinates: hostelPayload.coordinates && hostelPayload.coordinates.lat != null && hostelPayload.coordinates.lng != null
             ? {
-                lat: parseFloat(result.hostel.coordinates.lat),
-                lng: parseFloat(result.hostel.coordinates.lng)
+                lat: parseFloat(hostelPayload.coordinates.lat),
+                lng: parseFloat(hostelPayload.coordinates.lng)
               }
             : null,
-          status: result.hostel.status || 'active',
-          contactNumber: result.hostel.contactNumber,
-          contactEmail: result.hostel.contactEmail,
-          admin: result.hostel.admin ? {
-            name: result.hostel.admin.name,
-            email: result.hostel.admin.email,
-            phoneNumber: result.hostel.admin.phoneNumber,
-            id: result.hostel.admin._id || result.hostel.admin.id
+          status: hostelPayload.status || 'active',
+          contactNumber: hostelPayload.contactNumber,
+          contactEmail: hostelPayload.contactEmail,
+          admin: hostelPayload.admin ? {
+            name: hostelPayload.admin.name,
+            email: hostelPayload.admin.email,
+            phoneNumber: hostelPayload.admin.phoneNumber,
+            id: hostelPayload.admin._id || hostelPayload.admin.id
           } : null
         }
         
@@ -109,6 +125,56 @@ const HostelDetails = () => {
       }
     } else {
       toast.error('Admin information not available')
+    }
+  }
+
+  const calculateDistanceFromCollege = async () => {
+    if (!collegeCoordinates) {
+      toast.error('College location not found in your profile')
+      return
+    }
+
+    if (!hostel?.coordinates?.lat || !hostel?.coordinates?.lng) {
+      toast.error('Hostel coordinates are not available')
+      return
+    }
+
+    setCalculatingDistance(true)
+    try {
+      const response = await fetch(`${API_BASE_URL}/distance/calculate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          originCoordinates: {
+            lat: collegeCoordinates.lat,
+            lng: collegeCoordinates.lng
+          },
+          destinationCoordinates: {
+            lat: parseFloat(hostel.coordinates.lat),
+            lng: parseFloat(hostel.coordinates.lng)
+          }
+        })
+      })
+
+      const result = await response.json()
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || 'Failed to calculate distance')
+      }
+
+      setCollegeDistance({
+        distance: result.data.distance,
+        duration: result.data.duration,
+        method: result.data.method
+      })
+      toast.success(`Distance: ${result.data.distance.toFixed(2)} km`)
+    } catch (error) {
+      console.error('Error calculating college distance:', error)
+      toast.error(error.message || 'Failed to calculate distance')
+    } finally {
+      setCalculatingDistance(false)
     }
   }
 
@@ -406,16 +472,65 @@ const HostelDetails = () => {
              !isNaN(hostel.coordinates.lat) && 
              !isNaN(hostel.coordinates.lng) && (
               <div className="bg-white rounded-lg shadow-md p-6">
-                <h2 className="text-2xl font-semibold mb-4">Location</h2>
+                <h2 className="text-2xl font-semibold mb-4">Location & Distance</h2>
+
+                {collegeDistance && (
+                  <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-lg font-semibold text-blue-800 flex items-center">
+                      <FaRoute className="mr-2" />
+                      {collegeDistance.distance.toFixed(2)} km from your college
+                    </p>
+                    {collegeDistance.duration && (
+                      <p className="text-sm text-blue-700 mt-1">Approx. {collegeDistance.duration} minutes</p>
+                    )}
+                    <p className="text-xs text-blue-600 mt-1">
+                      Method: {collegeDistance.method === 'road' ? 'Road distance' : 'Direct distance'}
+                    </p>
+                  </div>
+                )}
+
+                <div className="mb-4">
+                  <button
+                    onClick={calculateDistanceFromCollege}
+                    disabled={calculatingDistance || !collegeCoordinates}
+                    className="w-full md:w-auto px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {calculatingDistance ? 'Calculating...' : 'Calculate Distance from College'}
+                  </button>
+                  {!collegeCoordinates && (
+                    <p className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                      Add your college location in profile to calculate distance.
+                    </p>
+                  )}
+                </div>
+
                 <div className="h-96 rounded-lg overflow-hidden border border-gray-300">
                   <MapComponent
-                    center={[parseFloat(hostel.coordinates.lat), parseFloat(hostel.coordinates.lng)]}
-                    markers={[{ 
-                      lat: parseFloat(hostel.coordinates.lat), 
-                      lng: parseFloat(hostel.coordinates.lng), 
-                      title: hostel.name,
-                      color: 'blue'
-                    }]}
+                    center={collegeCoordinates
+                      ? [
+                          (parseFloat(hostel.coordinates.lat) + collegeCoordinates.lat) / 2,
+                          (parseFloat(hostel.coordinates.lng) + collegeCoordinates.lng) / 2
+                        ]
+                      : [parseFloat(hostel.coordinates.lat), parseFloat(hostel.coordinates.lng)]}
+                    zoom={collegeCoordinates ? 11 : 13}
+                    markers={[
+                      {
+                        lat: parseFloat(hostel.coordinates.lat),
+                        lng: parseFloat(hostel.coordinates.lng),
+                        title: hostel.name || 'Hostel location',
+                        color: 'blue'
+                      },
+                      ...(collegeCoordinates
+                        ? [
+                            {
+                              lat: collegeCoordinates.lat,
+                              lng: collegeCoordinates.lng,
+                              title: user?.collegeName || 'Your college',
+                              color: 'red'
+                            }
+                          ]
+                        : [])
+                    ]}
                     scrollWheelZoom={true}
                     doubleClickZoom={true}
                     dragging={true}
@@ -424,6 +539,9 @@ const HostelDetails = () => {
                     keyboard={true}
                   />
                 </div>
+                <p className="mt-2 text-xs text-gray-500">
+                  Blue marker: Hostel location | Red marker: Your college location
+                </p>
               </div>
             )}
           </div>

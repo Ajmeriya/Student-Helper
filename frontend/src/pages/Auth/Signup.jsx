@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { 
@@ -11,6 +11,11 @@ import {
 } from 'react-icons/fa'
 import { motion } from 'framer-motion'
 import MapComponent from '../../components/Common/MapComponent'
+
+const GOOGLE_CLIENT_ID = (
+  import.meta.env.VITE_GOOGLE_CLIENT_ID ||
+  '248470197812-93ujsqto2gdupa4t2jfgb30hinol4q9s.apps.googleusercontent.com'
+).trim()
 
 const Signup = () => {
   const [formData, setFormData] = useState({
@@ -29,8 +34,9 @@ const Signup = () => {
   const [loading, setLoading] = useState(false)
   const [collegeLocation, setCollegeLocation] = useState(null)
   const [geocodingAddress, setGeocodingAddress] = useState(false)
-  const { signup } = useAuth()
+  const { signup, googleAuth } = useAuth()
   const navigate = useNavigate()
+  const googleButtonRef = useRef(null)
 
   const cities = [
     'Nadiad', 'Ahmedabad', 'Vadodara', 'Surat', 'Rajkot', 
@@ -171,6 +177,118 @@ const Signup = () => {
       }
     }
   }
+
+  const validateGoogleSignup = () => {
+    const newErrors = {}
+
+    if (!formData.phoneNumber) {
+      newErrors.phoneNumber = 'Phone number is required for Google signup'
+    } else if (!/^\d{10}$/.test(formData.phoneNumber)) {
+      newErrors.phoneNumber = 'Phone number must be 10 digits'
+    }
+
+    if (!formData.city) {
+      newErrors.city = 'City is required for Google signup'
+    }
+
+    if (!formData.role) {
+      newErrors.role = 'Role is required for Google signup'
+    }
+
+    if (formData.role === 'student' && !formData.collegeName.trim()) {
+      newErrors.collegeName = 'College name is required for students'
+    }
+
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+
+  const handleAuthSuccessNavigation = () => {
+    const user = JSON.parse(localStorage.getItem('user'))
+    if (!user) return
+
+    switch (user.role) {
+      case 'student':
+        navigate('/student/dashboard')
+        break
+      case 'broker':
+        navigate('/broker/dashboard')
+        break
+      case 'hostelAdmin':
+        navigate('/hostel-admin/dashboard')
+        break
+      default:
+        navigate('/')
+    }
+  }
+
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID) {
+      return
+    }
+
+    const initializeGoogle = () => {
+      if (!window.google || !googleButtonRef.current) {
+        return
+      }
+
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: async (response) => {
+          if (!validateGoogleSignup()) {
+            return
+          }
+
+          const payload = {
+            idToken: response.credential,
+            role: formData.role,
+            phoneNumber: formData.phoneNumber,
+            city: formData.city,
+            ...(formData.role === 'student' && {
+              collegeName: formData.collegeName,
+              collegeLocation: collegeLocation
+                ? {
+                    coordinates: {
+                      lat: collegeLocation.lat,
+                      lng: collegeLocation.lng
+                    }
+                  }
+                : undefined
+            })
+          }
+
+          const result = await googleAuth(payload)
+          if (result.success) {
+            handleAuthSuccessNavigation()
+          }
+        }
+      })
+
+      googleButtonRef.current.innerHTML = ''
+      window.google.accounts.id.renderButton(googleButtonRef.current, {
+        theme: 'outline',
+        size: 'large',
+        text: 'signup_with',
+        width: 360
+      })
+    }
+
+    if (window.google) {
+      initializeGoogle()
+      return
+    }
+
+    const script = document.createElement('script')
+    script.src = 'https://accounts.google.com/gsi/client'
+    script.async = true
+    script.defer = true
+    script.onload = initializeGoogle
+    document.body.appendChild(script)
+
+    return () => {
+      script.onload = null
+    }
+  }, [googleAuth, formData, collegeLocation])
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -492,6 +610,15 @@ const Signup = () => {
             >
               {geocodingAddress ? 'Geocoding address...' : loading ? 'Creating account...' : 'Create Account'}
             </button>
+          </div>
+
+          <div className="text-center text-sm text-gray-500">or</div>
+          <div className="flex justify-center">
+            {GOOGLE_CLIENT_ID ? (
+              <div ref={googleButtonRef} />
+            ) : (
+              <p className="text-sm text-gray-500">Google signup disabled. Set `VITE_GOOGLE_CLIENT_ID`.</p>
+            )}
           </div>
         </form>
       </motion.div>

@@ -1,21 +1,24 @@
 package com.studenthelper.controller;
 
-import com.studenthelper.entity.Item;
+import com.studenthelper.dto.ApiResponse;
+import com.studenthelper.dto.ItemFilterRequest;
+import com.studenthelper.dto.ItemRequest;
+import com.studenthelper.dto.ItemResponse;
 import com.studenthelper.entity.User;
-import com.studenthelper.repository.ItemRepository;
 import com.studenthelper.service.CloudinaryService;
+import com.studenthelper.service.ItemService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.bind.WebDataBinder;
 import org.springframework.web.multipart.MultipartFile;
-
-import jakarta.persistence.criteria.Predicate;
 import java.util.*;
 
 @RestController
@@ -26,7 +29,7 @@ public class ItemController {
     private static final Logger logger = LoggerFactory.getLogger(ItemController.class);
 
     @Autowired
-    private ItemRepository itemRepository;
+    private ItemService itemService;
 
     @Autowired
     private CloudinaryService cloudinaryService;
@@ -37,52 +40,43 @@ public class ItemController {
     }
 
     @GetMapping
-    public ResponseEntity<Map<String, Object>> getAllItems(@RequestParam Map<String, String> filters) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getAllItems(
+            ItemFilterRequest filters,
+            @PageableDefault(size = 10, sort = "createdAt") Pageable pageable) {
         try {
-            Specification<Item> spec = buildSpecification(filters);
-            List<Item> items = itemRepository.findAll(spec);
-            
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("count", items.size());
-            response.put("items", items);
-            return ResponseEntity.ok(response);
+            Page<ItemResponse> page = itemService.getAllItems(filters, pageable);
+            Map<String, Object> pagedData = new LinkedHashMap<>();
+            pagedData.put("content", page.getContent());
+            pagedData.put("page", page.getNumber());
+            pagedData.put("size", page.getSize());
+            pagedData.put("totalElements", page.getTotalElements());
+            pagedData.put("totalPages", page.getTotalPages());
+            pagedData.put("sort", page.getSort().toString());
+            return ResponseEntity.ok(ApiResponse.success(pagedData, page.getNumberOfElements()));
         } catch (Exception e) {
             logger.error("Error fetching items", e);
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "Error fetching items");
-            response.put("error", e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Error fetching items", e.getMessage()));
         }
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> getItemById(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<ItemResponse>> getItemById(@PathVariable Long id) {
         try {
-            Item item = itemRepository.findById(id).orElse(null);
+            ItemResponse item = itemService.getItemById(id);
             if (item == null) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("success", false);
-                response.put("message", "Item not found");
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(ApiResponse.error("Item not found"));
             }
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("item", item);
-            return ResponseEntity.ok(response);
+            return ResponseEntity.ok(ApiResponse.success(item));
         } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "Error fetching item");
-            response.put("error", e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Error fetching item", e.getMessage()));
         }
     }
 
     @PostMapping
-    public ResponseEntity<Map<String, Object>> createItem(
+    public ResponseEntity<ApiResponse<ItemResponse>> createItem(
             @RequestParam(required = false) MultipartFile[] images,
             @RequestParam String title,
             @RequestParam String description,
@@ -116,176 +110,216 @@ public class ItemController {
             }
 
             if (userId == null || user == null || user.getRole() != User.Role.student) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("success", false);
-                response.put("message", "Access denied. Student role required.");
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(ApiResponse.error("Access denied. Student role required."));
             }
 
-            // Create Item object manually
-            Item item = new Item();
-            item.setTitle(title);
-            item.setDescription(description);
-            
-            // Handle category enum
-            try {
-                item.setCategory(Item.Category.valueOf(category.toLowerCase()));
-            } catch (IllegalArgumentException e) {
-                item.setCategory(Item.Category.other); // Default
-            }
-            
-            item.setSubcategory(subcategory);
-            item.setPrice(price);
-            item.setNegotiable(parseBoolean(negotiable));
-            
-            // Handle condition enum - map "new" to NEW, "like-new" to likeNew
-            try {
-                if ("new".equalsIgnoreCase(condition)) {
-                    item.setCondition(Item.Condition.NEW);
-                } else if ("like-new".equalsIgnoreCase(condition) || "likenew".equalsIgnoreCase(condition)) {
-                    item.setCondition(Item.Condition.likeNew);
-                } else {
-                    // Try to match by enum name (good, fair, poor)
-                    item.setCondition(Item.Condition.valueOf(condition.toLowerCase()));
-                }
-            } catch (IllegalArgumentException e) {
-                logger.warn("Unknown Condition value: {}, defaulting to good", condition);
-                item.setCondition(Item.Condition.good); // Default
-            }
-            
-            item.setCity(city);
-            item.setLocation(location);
-            item.setBrand(brand);
-            item.setModel(model);
-            item.setYear(year);
-            
-            // Handle contactMethod enum
-            try {
-                item.setContactMethod(Item.ContactMethod.valueOf(contactMethod.toLowerCase()));
-            } catch (IllegalArgumentException e) {
-                item.setContactMethod(Item.ContactMethod.chat); // Default
-            }
-            
-            // Initialize images list
-            if (item.getImages() == null) {
-                item.setImages(new ArrayList<>());
-            }
-            
-            // Upload images
+            // Upload images first
+            List<String> imageUrls = new ArrayList<>();
             if (images != null && images.length > 0) {
-                item.setImages(cloudinaryService.uploadImages(
-                    Arrays.asList(images), "student-helper/items"));
+                imageUrls = cloudinaryService.uploadImages(
+                    Arrays.asList(images), "student-helper/items");
             }
 
-            item.setSeller(user);
-            item.setStatus(Item.ItemStatus.available);
+            // Build ItemRequest DTO
+            ItemRequest itemRequest = buildItemRequestFromParams(
+                title, description, category, subcategory, price, negotiable,
+                condition, city, location, brand, model, year, contactMethod, imageUrls
+            );
 
-            Item createdItem = itemRepository.save(item);
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", "Item created successfully");
-            response.put("item", createdItem);
-            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+            ItemResponse createdItem = itemService.createItem(itemRequest, userId);
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(ApiResponse.success(createdItem, "Item created successfully"));
         } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "Error creating item");
-            response.put("error", e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Error creating item", e.getMessage()));
         }
     }
 
     @GetMapping("/my-items")
-    public ResponseEntity<Map<String, Object>> getMyItems(HttpServletRequest request) {
+    public ResponseEntity<ApiResponse<List<ItemResponse>>> getMyItems(HttpServletRequest request) {
         try {
-            org.springframework.security.core.Authentication authentication = 
-                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-            
-            User user = null;
-            Long userId = null;
-            
-            if (authentication != null && authentication.getPrincipal() instanceof User) {
-                user = (User) authentication.getPrincipal();
-                userId = user.getId();
-            } else {
-                // Fallback to request attributes
-                userId = (Long) request.getAttribute("userId");
-                user = (User) request.getAttribute("user");
-            }
+            User user = resolveCurrentUser(request);
+            Long userId = user != null ? user.getId() : null;
 
             if (userId == null || user == null) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("success", false);
-                response.put("message", "Access denied. Authentication required.");
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(ApiResponse.error("Access denied. Authentication required."));
             }
             
             if (user.getRole() != User.Role.student) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("success", false);
-                response.put("message", "Access denied. Student role required.");
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(ApiResponse.error("Access denied. Student role required."));
             }
 
-            List<Item> items = itemRepository.findBySeller_Id(userId);
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("count", items.size());
-            response.put("items", items);
-            return ResponseEntity.ok(response);
+            List<ItemResponse> items = itemService.getMyItems(userId);
+            return ResponseEntity.ok(ApiResponse.success(items, items.size()));
         } catch (Exception e) {
             logger.error("Error fetching my items", e);
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "Error fetching items");
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Error fetching items", e.getMessage()));
         }
     }
 
-    private Specification<Item> buildSpecification(Map<String, String> filters) {
-        return (root, query, cb) -> {
-            List<Predicate> predicates = new ArrayList<>();
-            
-            String status = filters.getOrDefault("status", "available");
-            predicates.add(cb.equal(root.get("status"), 
-                Enum.valueOf(Item.ItemStatus.class, status)));
+    @PutMapping("/{id}")
+    public ResponseEntity<ApiResponse<ItemResponse>> updateItem(
+            @PathVariable Long id,
+            @RequestParam(required = false) MultipartFile[] images,
+            @RequestParam(required = false) List<String> existingImages,
+            @RequestParam String title,
+            @RequestParam String description,
+            @RequestParam String category,
+            @RequestParam(required = false) String subcategory,
+            @RequestParam Double price,
+            @RequestParam(required = false, defaultValue = "false") String negotiable,
+            @RequestParam String condition,
+            @RequestParam String city,
+            @RequestParam(required = false) String location,
+            @RequestParam(required = false) String brand,
+            @RequestParam(required = false) String model,
+            @RequestParam(required = false) Integer year,
+            @RequestParam(required = false, defaultValue = "chat") String contactMethod,
+            HttpServletRequest request) {
+        try {
+            User user = resolveCurrentUser(request);
+            Long userId = user != null ? user.getId() : null;
 
-            if (filters.containsKey("city")) {
-                predicates.add(cb.equal(root.get("city"), filters.get("city")));
+            if (userId == null || user == null || user.getRole() != User.Role.student) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(ApiResponse.error("Access denied. Student role required."));
             }
 
-            if (filters.containsKey("category")) {
-                predicates.add(cb.equal(root.get("category"), 
-                    Enum.valueOf(Item.Category.class, filters.get("category"))));
+            List<String> imageUrls = new ArrayList<>();
+            if (existingImages != null) {
+                imageUrls.addAll(existingImages);
+            }
+            if (images != null && images.length > 0) {
+                imageUrls.addAll(cloudinaryService.uploadImages(
+                        Arrays.asList(images), "student-helper/items"));
             }
 
-            if (filters.containsKey("minPrice")) {
-                predicates.add(cb.greaterThanOrEqualTo(root.get("price"), Double.parseDouble(filters.get("minPrice"))));
-            }
+            ItemRequest itemRequest = buildItemRequestFromParams(
+                    title, description, category, subcategory, price, negotiable,
+                    condition, city, location, brand, model, year, contactMethod, imageUrls
+            );
 
-            if (filters.containsKey("maxPrice")) {
-                predicates.add(cb.lessThanOrEqualTo(root.get("price"), Double.parseDouble(filters.get("maxPrice"))));
-            }
-
-            if (filters.containsKey("search")) {
-                String search = filters.get("search").toLowerCase();
-                Predicate titlePred = cb.like(cb.lower(root.get("title")), "%" + search + "%");
-                Predicate descPred = cb.like(cb.lower(root.get("description")), "%" + search + "%");
-                predicates.add(cb.or(titlePred, descPred));
-            }
-
-            return cb.and(predicates.toArray(new Predicate[0]));
-        };
+            ItemResponse updatedItem = itemService.updateItem(id, itemRequest, userId);
+            return ResponseEntity.ok(ApiResponse.success(updatedItem, "Item updated successfully"));
+        } catch (Exception e) {
+            logger.error("Error updating item", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Error updating item", e.getMessage()));
+        }
     }
-    
+
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<ApiResponse<ItemResponse>> updateItemStatus(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> body,
+            HttpServletRequest request) {
+        try {
+            User user = resolveCurrentUser(request);
+            Long userId = user != null ? user.getId() : null;
+
+            if (userId == null || user == null || user.getRole() != User.Role.student) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(ApiResponse.error("Access denied. Student role required."));
+            }
+
+            if (body == null) {
+                return ResponseEntity.badRequest().body(ApiResponse.error("Status is required"));
+            }
+
+            String status = body.get("status");
+            if (status == null || status.isBlank()) {
+                return ResponseEntity.badRequest().body(ApiResponse.error("Status is required"));
+            }
+
+            ItemResponse updatedItem = itemService.updateItemStatus(id, status, userId);
+            return ResponseEntity.ok(ApiResponse.success(updatedItem, "Item status updated successfully"));
+        } catch (RuntimeException e) {
+            logger.warn("Runtime error updating item status: {}", e.getMessage());
+            HttpStatus status = (e.getMessage() != null && e.getMessage().toLowerCase().contains("not authorized"))
+                    ? HttpStatus.FORBIDDEN
+                    : HttpStatus.BAD_REQUEST;
+            return ResponseEntity.status(status)
+                    .body(ApiResponse.error(e.getMessage() != null ? e.getMessage() : "Failed to update item status"));
+        } catch (Exception e) {
+            logger.error("Error updating item status", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Error updating item status", e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<ApiResponse<Void>> deleteItem(
+            @PathVariable Long id,
+            HttpServletRequest request) {
+        try {
+            User user = resolveCurrentUser(request);
+            Long userId = user != null ? user.getId() : null;
+
+            if (userId == null || user == null || user.getRole() != User.Role.student) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(ApiResponse.error("Access denied. Student role required."));
+            }
+
+            itemService.deleteItem(id, userId);
+            return ResponseEntity.ok(ApiResponse.success(null, "Item deleted successfully"));
+        } catch (Exception e) {
+            logger.error("Error deleting item", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Error deleting item", e.getMessage()));
+        }
+    }
+
+    private User resolveCurrentUser(HttpServletRequest request) {
+        org.springframework.security.core.Authentication authentication =
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication != null && authentication.getPrincipal() instanceof User) {
+            return (User) authentication.getPrincipal();
+        }
+
+        Object requestUser = request.getAttribute("user");
+        if (requestUser instanceof User) {
+            return (User) requestUser;
+        }
+
+        return null;
+    }
+
     // Helper method to parse boolean from string (FormData sends everything as strings)
     private boolean parseBoolean(String value) {
         if (value == null || value.isEmpty()) {
             return false;
         }
         return "true".equalsIgnoreCase(value) || "1".equals(value) || Boolean.parseBoolean(value);
+    }
+
+    // Helper method to build ItemRequest from form parameters
+    private ItemRequest buildItemRequestFromParams(
+            String title, String description, String category, String subcategory,
+            Double price, String negotiable, String condition, String city, String location,
+            String brand, String model, Integer year, String contactMethod, List<String> imageUrls) {
+        
+        ItemRequest itemRequest = new ItemRequest();
+        itemRequest.setTitle(title);
+        itemRequest.setDescription(description);
+        itemRequest.setCategory(category);
+        itemRequest.setSubcategory(subcategory);
+        itemRequest.setPrice(price);
+        itemRequest.setNegotiable(parseBoolean(negotiable));
+        itemRequest.setCondition(condition);
+        itemRequest.setCity(city);
+        itemRequest.setLocation(location);
+        itemRequest.setBrand(brand);
+        itemRequest.setModel(model);
+        itemRequest.setYear(year);
+        itemRequest.setContactMethod(contactMethod);
+        itemRequest.setImages(imageUrls);
+        
+        return itemRequest;
     }
 }
 

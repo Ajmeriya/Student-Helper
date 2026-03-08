@@ -54,8 +54,10 @@ const EditHostel = () => {
 
       const result = await response.json()
 
-      if (result.success && result.hostel) {
-        const hostel = result.hostel
+      const hostelPayload = result?.data || result?.hostel || null
+
+      if (result.success && hostelPayload) {
+        const hostel = hostelPayload
         
         // Set form values
         setValue('name', hostel.name)
@@ -159,15 +161,13 @@ const EditHostel = () => {
       formData.append('fees', data.price || data.fees)
       formData.append('feesPeriod', data.feesPeriod || 'monthly')
       
-      // Coordinates
-      formData.append('coordinates', JSON.stringify({
-        lat: coordinates.lat,
-        lng: coordinates.lng
-      }))
+      // Coordinates (match HostelRequest DTO fields)
+      formData.append('latitude', coordinates.lat)
+      formData.append('longitude', coordinates.lng)
       
       // Facilities (send as individual fields)
       Object.keys(facilities).forEach(facility => {
-        formData.append(`facilities[${facility}]`, facilities[facility] ? 'true' : 'false')
+        formData.append(`facilities.${facility}`, facilities[facility] ? 'true' : 'false')
       })
       
       // Optional fields
@@ -178,12 +178,12 @@ const EditHostel = () => {
       
       // Add new images (if any)
       images.forEach((image) => {
-        formData.append('images', image)
+        formData.append('imageFiles', image)
       })
       
       // Add new videos (if any)
       videos.forEach((video) => {
-        formData.append('videos', video)
+        formData.append('videoFiles', video)
       })
       
       console.log('📤 Updating hostel...', {

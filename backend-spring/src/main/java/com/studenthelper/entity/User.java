@@ -27,6 +27,22 @@ public class User {
     @Column(nullable = false)
     private String password;
 
+    @Column(name = "email_verified", nullable = false)
+    private Boolean emailVerified = false;
+
+    @Column(name = "email_verification_code", length = 6)
+    private String emailVerificationCode;
+
+    @Column(name = "email_verification_expires_at")
+    private LocalDateTime emailVerificationExpiresAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "auth_provider", nullable = false)
+    private AuthProvider authProvider = AuthProvider.LOCAL;
+
+    @Column(name = "google_id", unique = true)
+    private String googleId;
+
     @Column(nullable = false, name = "phone_number")
     private String phoneNumber;
 
@@ -63,6 +79,10 @@ public class User {
 
     public enum Role {
         student, broker, hostelAdmin
+    }
+
+    public enum AuthProvider {
+        LOCAL, GOOGLE
     }
 
     @Embeddable

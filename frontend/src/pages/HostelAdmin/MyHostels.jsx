@@ -50,7 +50,11 @@ const MyHostels = () => {
       console.log('API Response:', result)
 
       if (result.success) {
-        const hostelsList = Array.isArray(result.hostels) ? result.hostels : []
+        const hostelsList = Array.isArray(result?.data)
+          ? result.data
+          : Array.isArray(result?.hostels)
+            ? result.hostels
+            : []
         setHostels(hostelsList)
         
         if (hostelsList.length === 0) {

@@ -28,12 +28,12 @@ services:
     container_name: student-helper-backend
     environment:
       SERVER_PORT: 5000
+      SPRING_PROFILES_ACTIVE: prod
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-Student_Helper}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-student_helper}
       MYSQL_USERNAME: ${MYSQL_USER:-studenthelper}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-password}
-      HIBERNATE_DDL_AUTO: update
       JWT_SECRET: ${JWT_SECRET:-change-this-secret-key-in-production-minimum-64-characters}
       JWT_EXPIRATION: 1728000000
       CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
@@ -56,6 +56,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:5000/api}
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
     container_name: student-helper-frontend
     ports:
       - "80:80"

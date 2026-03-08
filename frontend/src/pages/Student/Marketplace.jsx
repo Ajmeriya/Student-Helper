@@ -26,15 +26,22 @@ const Marketplace = () => {
       try {
         setLoading(true)
         const params = new URLSearchParams({
-          city: user?.city || '',
           status: 'available'
         })
         
         const response = await fetch(`${API_BASE_URL}/item?${params.toString()}`)
         const result = await response.json()
-        
-        if (result.success) {
-          const mappedItems = (result.items || []).map(item => ({
+
+        if (response.ok && result.success) {
+          const itemList = Array.isArray(result?.data?.content)
+            ? result.data.content
+            : Array.isArray(result?.data)
+              ? result.data
+              : Array.isArray(result?.items)
+                ? result.items
+                : []
+
+          const mappedItems = itemList.map(item => ({
             id: item._id || item.id,
             title: item.title,
             description: item.description,
@@ -66,11 +73,7 @@ const Marketplace = () => {
       }
     }
     
-    if (user?.city) {
-      fetchItems()
-    } else {
-      setLoading(false)
-    }
+    fetchItems()
   }, [user?.city])
 
   useEffect(() => {

@@ -54,10 +54,23 @@ const HostelList = () => {
       
       const response = await fetch(`${API_BASE_URL}/hostel?${params.toString()}`)
       const result = await response.json()
-      
-      if (result.success) {
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || 'Failed to fetch hostels')
+      }
+
+      // Support paged API shape and older list shape.
+      const hostelArray = Array.isArray(result?.data?.content)
+        ? result.data.content
+        : Array.isArray(result?.data)
+          ? result.data
+          : Array.isArray(result?.hostels)
+            ? result.hostels
+            : []
+
+      if (hostelArray.length >= 0) {
         // Map backend data to frontend format
-        const hostelsList = result.hostels.map(hostel => ({
+        const hostelsList = hostelArray.map(hostel => ({
           id: hostel._id || hostel.id,
           name: hostel.name,
           location: hostel.location,
@@ -80,10 +93,6 @@ const HostelList = () => {
         
         setHostels(hostelsList)
         setFilteredHostels(hostelsList)
-      } else {
-        toast.error(result.message || 'Failed to fetch hostels')
-        setHostels([])
-        setFilteredHostels([])
       }
     } catch (error) {
       console.error('Error fetching hostels:', error)

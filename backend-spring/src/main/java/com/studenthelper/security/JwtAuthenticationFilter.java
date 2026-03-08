@@ -48,11 +48,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 return;
             }
             
-            // Skip JWT validation for public GET endpoints only
+            // Skip JWT validation for public endpoints (auth endpoints allow all methods)
             String requestURI = request.getRequestURI();
             String method = request.getMethod();
+            
+            // Allow all methods for auth endpoints (login, signup, etc.)
+            if (requestURI.startsWith("/api/auth/")) {
+                filterChain.doFilter(request, response);
+                return;
+            }
+            
+            // Allow GET requests for other public endpoints
             if ("GET".equals(method) && (
-                requestURI.startsWith("/api/auth/") ||
                 requestURI.equals("/api/health") ||
                 requestURI.startsWith("/api/distance/") ||
                 (requestURI.startsWith("/api/pg") && !requestURI.contains("/my-pgs")) ||

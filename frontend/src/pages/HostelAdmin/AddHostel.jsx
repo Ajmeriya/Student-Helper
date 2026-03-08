@@ -56,6 +56,32 @@ const AddHostel = () => {
       return
     }
 
+    const cityValue = (user?.city || data.city || '').trim()
+    const totalRooms = Number(data.totalRooms)
+    const availableRooms = Number(data.roomsAvailable || data.availableRooms)
+    const feesValue = Number(data.price || data.fees)
+
+    if (!cityValue) {
+      toast.error('City is required. Please update your profile city or enter city in form.')
+      return
+    }
+    if (!Number.isFinite(totalRooms) || totalRooms < 1) {
+      toast.error('Total rooms must be at least 1')
+      return
+    }
+    if (!Number.isFinite(availableRooms) || availableRooms < 0) {
+      toast.error('Available rooms must be 0 or more')
+      return
+    }
+    if (availableRooms > totalRooms) {
+      toast.error('Available rooms cannot be greater than total rooms')
+      return
+    }
+    if (!Number.isFinite(feesValue) || feesValue <= 0) {
+      toast.error('Fees must be greater than 0')
+      return
+    }
+
     setLoading(true)
     try {
       // Get auth token
@@ -72,12 +98,12 @@ const AddHostel = () => {
       // Basic information
       formData.append('name', data.name)
       formData.append('location', data.location)
-      formData.append('city', user.city || data.city)
+      formData.append('city', cityValue)
       if (data.address) formData.append('address', data.address)
       formData.append('gender', data.gender)
-      formData.append('totalRooms', data.totalRooms)
-      formData.append('availableRooms', data.roomsAvailable || data.availableRooms)
-      formData.append('fees', data.price || data.fees)
+      formData.append('totalRooms', String(totalRooms))
+      formData.append('availableRooms', String(availableRooms))
+      formData.append('fees', String(feesValue))
       formData.append('feesPeriod', data.feesPeriod || 'monthly')
       
       // Send coordinates as separate parameters to avoid Spring binding issues
@@ -88,7 +114,7 @@ const AddHostel = () => {
       
       // Facilities (send as individual fields)
       Object.keys(facilities).forEach(facility => {
-        formData.append(`facilities[${facility}]`, facilities[facility] ? 'true' : 'false')
+        formData.append(`facilities.${facility}`, facilities[facility] ? 'true' : 'false')
       })
       
       // Optional fields
@@ -99,12 +125,12 @@ const AddHostel = () => {
       
       // Add images
       images.forEach((image, index) => {
-        formData.append('images', image)
+        formData.append('imageFiles', image)
       })
       
       // Add videos
       videos.forEach((video, index) => {
-        formData.append('videos', video)
+        formData.append('videoFiles', video)
       })
       
       console.log('📤 Uploading hostel data...', {
@@ -155,7 +181,15 @@ const AddHostel = () => {
           }, 1000)
           return
         }
-        throw new Error(result.message || result.error || 'Failed to create hostel')
+
+        const validationErrors = result?.data && typeof result.data === 'object'
+          ? Object.values(result.data).filter(Boolean)
+          : []
+        const validationMessage = validationErrors.length > 0
+          ? validationErrors.join(', ')
+          : null
+
+        throw new Error(validationMessage || result.message || result.error || 'Failed to create hostel')
       }
 
       if (result.success) {

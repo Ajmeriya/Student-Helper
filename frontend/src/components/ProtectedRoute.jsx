@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext'
 
 const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   const { user, loading } = useAuth()
+  const token = localStorage.getItem('token')
 
   if (loading) {
     return (
@@ -12,7 +13,7 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
     )
   }
 
-  if (!user) {
+  if (!user || !token) {
     return <Navigate to="/login" replace />
   }
 

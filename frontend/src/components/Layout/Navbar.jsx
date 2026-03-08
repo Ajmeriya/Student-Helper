@@ -1,4 +1,4 @@
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { 
   FaHome, 
@@ -12,7 +12,6 @@ import { useState } from 'react'
 
 const Navbar = () => {
   const { user, logout, isAuthenticated } = useAuth()
-  const navigate = useNavigate()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const handleLogout = () => {

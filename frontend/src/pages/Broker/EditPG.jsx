@@ -43,8 +43,10 @@ const EditPG = () => {
 
       const result = await response.json()
 
-      if (result.success && result.pg) {
-        const pg = result.pg
+      const pgData = result?.data || result?.pg
+
+      if (result.success && pgData) {
+        const pg = pgData
         
         // Set form values
         setValue('title', pg.title)
@@ -127,7 +129,10 @@ const EditPG = () => {
       // Add text fields
       formData.append('title', data.title)
       formData.append('location', data.location)
-      formData.append('city', user.city)
+      const resolvedCity = user?.city || data.city || ''
+      if (resolvedCity) {
+        formData.append('city', resolvedCity)
+      }
       formData.append('collegeName', data.collegeName)
       formData.append('sharingType', data.sharingType)
       formData.append('bedrooms', parseInt(data.bedrooms))
@@ -170,7 +175,7 @@ const EditPG = () => {
       })
       
       const response = await fetch(`${API_BASE_URL}/pg/${id}`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${token}`
           // Don't set Content-Type - let browser set it with boundary for FormData

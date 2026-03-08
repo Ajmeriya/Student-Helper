@@ -34,7 +34,11 @@ const HostelAdminDashboard = () => {
       if (response.ok) {
         const data = await response.json()
         if (data.success) {
-          const hostels = data.hostels || []
+          const hostels = Array.isArray(data?.data)
+            ? data.data
+            : Array.isArray(data?.hostels)
+              ? data.hostels
+              : []
           const activeHostels = hostels.filter(hostel => hostel.status === 'active' || hostel.status === 'ACTIVE')
           
           setStats({
